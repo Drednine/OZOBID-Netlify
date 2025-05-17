@@ -112,11 +112,13 @@ const BidManagementForm: React.FC<BidManagementFormProps> = ({ userId, credentia
           <label className="block text-gray-700 mb-2">Выберите кампанию</label>
           <select
             className="w-full px-3 py-2 border rounded-md"
-            onChange={(e) => handleCampaignSelect(e.target.value)}
             defaultValue=""
             {...register('campaignId', {
               required: 'Выберите кампанию',
-              validate: (value) => !!value || 'Выберите кампанию'
+              onChange: (e) => {
+                const value = e.target.value;
+                handleCampaignSelect(value);
+              }
             })}
           >
             <option value="" disabled>Выберите кампанию</option>
@@ -134,9 +136,9 @@ const BidManagementForm: React.FC<BidManagementFormProps> = ({ userId, credentia
             <label className="block text-gray-700 mb-2">Выберите товар</label>
             <select
               className="w-full px-3 py-2 border rounded-md"
-              onChange={(e) => handleProductSelect(e.target.value)}
               defaultValue=""
               {...register('productId', { required: 'Выберите товар' })}
+              onChange={(e) => handleProductSelect(e.target.value)}
             >
               <option value="" disabled>Выберите товар</option>
               {products.map(product => (
