@@ -76,8 +76,16 @@ const BidManagementForm: React.FC<BidManagementFormProps> = ({ userId, credentia
     setMessage('');
     
     try {
+      // Убедимся, что campaignId всегда строка, а не null
+      const campaignId = data.campaignId || (selectedCampaign || '');
+      
+      // Проверка на пустую строку
+      if (!campaignId) {
+        throw new Error('Не выбрана кампания');
+      }
+      
       const bidUpdate: BidUpdate = {
-        campaignId: data.campaignId || selectedCampaign,
+        campaignId: campaignId,
         productId: data.productId,
         newBid: data.newBid
       };
