@@ -28,11 +28,13 @@ const BidManagementForm: React.FC<BidManagementFormProps> = ({ userId, credentia
     const loadCampaigns = async () => {
       setLoading(true);
       const { data: campaignsData, error: campaignsError } = await getCampaignsList(credentials);
+
       if (campaignsError) {
-        setMessage('Ошибка при загрузке кампаний: ' + campaignsError.message);
+        setMessage('Ошибка при загрузке кампаний: ' + (campaignsError as Error).message);
       } else if (campaignsData) {
         setCampaigns(campaignsData.campaigns || []);
       }
+
       setLoading(false);
     };
     loadCampaigns();
@@ -80,7 +82,7 @@ const BidManagementForm: React.FC<BidManagementFormProps> = ({ userId, credentia
       const { error } = await updateBids(credentials, [bidUpdate]);
 
       if (error) {
-        throw new Error('Ошибка при обновлении ставки: ' + error.message);
+        throw new Error('Ошибка при обновлении ставки: ' + (error as Error).message);
       }
 
       setMessage('Ставка успешно обновлена');
