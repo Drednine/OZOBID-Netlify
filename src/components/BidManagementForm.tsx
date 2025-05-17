@@ -20,7 +20,7 @@ const BidManagementForm: React.FC<BidManagementFormProps> = ({ userId, credentia
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
-  const [selectedCampaign, setSelectedCampaign] = useState<string | null>(null);
+  const [selectedCampaign, setSelectedCampaign] = useState<string>('');
   
   const { register, handleSubmit, setValue, formState: { errors } } = useForm<FormValues>();
   
@@ -76,16 +76,16 @@ const BidManagementForm: React.FC<BidManagementFormProps> = ({ userId, credentia
     setMessage('');
     
     try {
-      // Убедимся, что campaignId всегда строка, а не null
-      const campaignId = data.campaignId || (selectedCampaign || '');
+      // Используем campaignId из формы или из состояния
+      const finalCampaignId: string = data.campaignId || selectedCampaign;
       
-      // Проверка на пустую строку
-      if (!campaignId) {
+      // Проверяем, что campaignId не пустая строка
+      if (!finalCampaignId) {
         throw new Error('Не выбрана кампания');
       }
       
       const bidUpdate: BidUpdate = {
-        campaignId: campaignId,
+        campaignId: finalCampaignId,
         productId: data.productId,
         newBid: data.newBid
       };
