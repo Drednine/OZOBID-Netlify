@@ -10,7 +10,7 @@ interface BidManagementFormProps {
 }
 
 interface FormValues {
-  campaignId: string;
+  campaignId: string | null;
   productId: string;
   newBid: number;
 }
@@ -40,6 +40,7 @@ const BidManagementForm: React.FC<BidManagementFormProps> = ({ userId, credentia
 
   const handleCampaignSelect = async (campaignId: string) => {
     setSelectedCampaign(campaignId);
+    setValue('campaignId', campaignId);
     setLoading(true);
     setTimeout(() => {
       setProducts([
@@ -59,13 +60,12 @@ const BidManagementForm: React.FC<BidManagementFormProps> = ({ userId, credentia
     }
   };
 
-  // ✅ Исправлено: безошибочная работа с campaignId
   const onSubmit = async (data: FormValues) => {
     setLoading(true);
     setMessage('');
 
     try {
-      const finalCampaignId: string = (data.campaignId ?? selectedCampaign) as string;
+      const finalCampaignId = (data.campaignId ?? selectedCampaign) as string;
 
       if (!finalCampaignId) {
         throw new Error('Не выбрана кампания');
@@ -114,7 +114,10 @@ const BidManagementForm: React.FC<BidManagementFormProps> = ({ userId, credentia
             className="w-full px-3 py-2 border rounded-md"
             onChange={(e) => handleCampaignSelect(e.target.value)}
             defaultValue=""
-            {...register('campaignId', { required: 'Выберите кампанию' })}
+            {...register('campaignId', {
+              required: 'Выберите кампанию',
+              validate: (value) => !!value || 'Выберите кампанию'
+            })}
           >
             <option value="" disabled>Выберите кампанию</option>
             {campaigns.map(campaign => (
