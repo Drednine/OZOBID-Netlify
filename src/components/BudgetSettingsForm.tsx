@@ -37,12 +37,11 @@ const BudgetSettingsForm: React.FC<BudgetSettingsFormProps> = ({ userId, credent
       }
       
       const { data: budgetData, error: budgetError } = await getBudgetSettings(userId);
-
       if (budgetError) {
         setMessage('Ошибка при загрузке настроек бюджета: ' + (budgetError as Error).message);
       } else if (budgetData && budgetData.campaignBudgets.length > 0) {
         setValue('dailyLimit', budgetData.campaignBudgets[0].budget);
-        setValue('notificationThreshold', 80); // <-- заменишь на актуальное значение, если нужно
+        setValue('notificationThreshold', 80); // заглушка, если нет поля
       }
       
       setLoading(false);
@@ -64,11 +63,11 @@ const BudgetSettingsForm: React.FC<BudgetSettingsFormProps> = ({ userId, credent
     setMessage('');
     
     try {
-      const { error: budgetError } = await updateBudgetSettings(
-        userId,
-        data.dailyLimit,
-        data.notificationThreshold
-      );
+      // ✅ Передаём объект вторым аргументом
+      const { error: budgetError } = await updateBudgetSettings(userId, {
+        dailyLimit: data.dailyLimit,
+        notificationThreshold: data.notificationThreshold
+      });
       
       if (budgetError) {
         throw new Error('Ошибка при обновлении настроек бюджета: ' + (budgetError as Error).message);
