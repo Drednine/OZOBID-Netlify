@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { getCampaignsList, updateCampaignBudget, OzonCredentials } from '@/lib/ozonApi';
 import { getBudgetSettings, updateBudgetSettings } from '@/lib/supabase';
+import BudgetMonitor from './BudgetMonitor';
 
 interface BudgetSettingsFormProps {
   userId: string;
@@ -13,6 +14,7 @@ interface BudgetSettingsFormProps {
 interface FormValues {
   dailyLimit: number;
   notificationThreshold: number;
+  isActive: boolean;
   campaignId: string;
   campaignBudget: number;
 }
@@ -22,8 +24,10 @@ const BudgetSettingsForm: React.FC<BudgetSettingsFormProps> = ({ userId, credent
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [selectedCampaign, setSelectedCampaign] = useState<string | null>(null);
+  const [showMonitor, setShowMonitor] = useState(false);
   
-  const { register, handleSubmit, setValue, formState: { errors } } = useForm<FormValues>();
+  const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm<FormValues>();
+  const isActiveValue = watch('isActive');
   
   useEffect(() => {
     const loadData = async () => {
@@ -39,9 +43,10 @@ const BudgetSettingsForm: React.FC<BudgetSettingsFormProps> = ({ userId, credent
       const { data: budgetData, error: budgetError } = await getBudgetSettings(userId);
       if (budgetError) {
         setMessage('Ошибка при загрузке настроек бюджета: ' + (budgetError as Error).message);
-      } else if (budgetData && budgetData.campaignBudgets.length > 0) {
-        setValue('dailyLimit', budgetData.campaignBudgets[0].budget);
-        setValue('notificationThreshold', 80); // заглушка, если нет поля
+      } else if (budgetData) {
+        setValue('dailyLimit', budgetData.daily_limit || 0);
+        setValue('notificationThreshold', budgetData.notification_threshold || 80);
+        setValue('isActive', budgetData.is_active !== undefined ? budgetData.is_active : true);
       }
       
       setLoading(false);
@@ -54,7 +59,7 @@ const BudgetSettingsForm: React.FC<BudgetSettingsFormProps> = ({ userId, credent
     setSelectedCampaign(campaignId);
     const campaign = campaigns.find(c => c.id === campaignId);
     if (campaign) {
-      setValue('campaignBudget', campaign.dailyBudget);
+      setValue('campaignBudget', campaign.dailyBudget || 0);
     }
   };
   
@@ -63,10 +68,10 @@ const BudgetSettingsForm: React.FC<BudgetSettingsFormProps> = ({ userId, credent
     setMessage('');
     
     try {
-      // ✅ Передаём объект вторым аргументом
       const { error: budgetError } = await updateBudgetSettings(userId, {
-        dailyLimit: data.dailyLimit,
-        notificationThreshold: data.notificationThreshold
+        daily_limit: data.dailyLimit,
+        notification_threshold: data.notificationThreshold,
+        is_active: data.isActive
       });
       
       if (budgetError) {
@@ -94,72 +99,111 @@ const BudgetSettingsForm: React.FC<BudgetSettingsFormProps> = ({ userId, credent
   };
   
   return (
-    <div className="max-w-md mx-auto bg-white p-6 rounded-lg shadow-md">
-      <h2 className="text-2xl font-bold mb-6">Настройки бюджета</h2>
-      
-      {message && (
-        <div className={`p-4 mb-4 rounded ${message.includes('Ошибка') ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
-          {message}
-        </div>
-      )}
-      
-      <form onSubmit={handleSubmit(onSubmit)}>
-        <div className="mb-4">
-          <label className="block text-gray-700 mb-2">Общий дневной лимит (руб.)</label>
-          <input
-            type="number"
-            className="w-full px-3 py-2 border rounded-md"
-            {...register('dailyLimit', { required: 'Это поле обязательно', min: { value: 0, message: 'Значение должно быть положительным' } })}
-          />
-          {errors.dailyLimit && <p className="text-red-500 mt-1">{errors.dailyLimit.message}</p>}
+    <div className="max-w-4xl mx-auto">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="bg-white p-6 rounded-lg shadow-md">
+          <h2 className="text-2xl font-bold mb-6">Настройки бюджета</h2>
+          
+          {message && (
+            <div className={`p-4 mb-4 rounded ${message.includes('Ошибка') ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+              {message}
+            </div>
+          )}
+          
+          <form onSubmit={handleSubmit(onSubmit)}>
+            <div className="mb-4">
+              <label className="block text-gray-700 mb-2">Общий дневной лимит (руб.)</label>
+              <input
+                type="number"
+                className="w-full px-3 py-2 border rounded-md"
+                {...register('dailyLimit', { 
+                  required: 'Это поле обязательно', 
+                  min: { value: 0, message: 'Значение должно быть положительным' } 
+                })}
+              />
+              {errors.dailyLimit && <p className="text-red-500 mt-1">{errors.dailyLimit.message}</p>}
+            </div>
+            
+            <div className="mb-4">
+              <label className="block text-gray-700 mb-2">Порог уведомления (%)</label>
+              <input
+                type="number"
+                className="w-full px-3 py-2 border rounded-md"
+                {...register('notificationThreshold', { 
+                  required: 'Это поле обязательно', 
+                  min: { value: 1, message: 'Минимальное значение 1%' }, 
+                  max: { value: 100, message: 'Максимальное значение 100%' } 
+                })}
+              />
+              {errors.notificationThreshold && <p className="text-red-500 mt-1">{errors.notificationThreshold.message}</p>}
+            </div>
+            
+            <div className="mb-4">
+              <label className="flex items-center text-gray-700 mb-2">
+                <input
+                  type="checkbox"
+                  className="mr-2"
+                  {...register('isActive')}
+                />
+                Автоматически отключать кампании при превышении лимита
+              </label>
+            </div>
+            
+            <div className="mb-4">
+              <label className="block text-gray-700 mb-2">Выберите кампанию для настройки бюджета</label>
+              <select
+                className="w-full px-3 py-2 border rounded-md"
+                onChange={(e) => handleCampaignSelect(e.target.value)}
+                defaultValue=""
+              >
+                <option value="" disabled>Выберите кампанию</option>
+                {campaigns.map(campaign => (
+                  <option key={campaign.id} value={campaign.id}>
+                    {campaign.name} ({campaign.state === 'active' ? 'активна' : 'приостановлена'})
+                  </option>
+                ))}
+              </select>
+            </div>
+            
+            {selectedCampaign && (
+              <div className="mb-4">
+                <label className="block text-gray-700 mb-2">Дневной бюджет кампании (руб.)</label>
+                <input
+                  type="number"
+                  className="w-full px-3 py-2 border rounded-md"
+                  {...register('campaignBudget', { 
+                    required: 'Это поле обязательно', 
+                    min: { value: 0, message: 'Значение должно быть положительным' } 
+                  })}
+                />
+                {errors.campaignBudget && <p className="text-red-500 mt-1">{errors.campaignBudget.message}</p>}
+              </div>
+            )}
+            
+            <button
+              type="submit"
+              className="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-md"
+              disabled={loading}
+            >
+              {loading ? 'Сохранение...' : 'Сохранить настройки'}
+            </button>
+            
+            <button
+              type="button"
+              className="w-full mt-4 bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded-md"
+              onClick={() => setShowMonitor(!showMonitor)}
+            >
+              {showMonitor ? 'Скрыть мониторинг' : 'Показать мониторинг'}
+            </button>
+          </form>
         </div>
         
-        <div className="mb-4">
-          <label className="block text-gray-700 mb-2">Порог уведомления (%)</label>
-          <input
-            type="number"
-            className="w-full px-3 py-2 border rounded-md"
-            {...register('notificationThreshold', { required: 'Это поле обязательно', min: { value: 1, message: 'Минимальное значение 1%' }, max: { value: 100, message: 'Максимальное значение 100%' } })}
-          />
-          {errors.notificationThreshold && <p className="text-red-500 mt-1">{errors.notificationThreshold.message}</p>}
-        </div>
-        
-        <div className="mb-4">
-          <label className="block text-gray-700 mb-2">Выберите кампанию для настройки бюджета</label>
-          <select
-            className="w-full px-3 py-2 border rounded-md"
-            onChange={(e) => handleCampaignSelect(e.target.value)}
-            defaultValue=""
-          >
-            <option value="" disabled>Выберите кампанию</option>
-            {campaigns.map(campaign => (
-              <option key={campaign.id} value={campaign.id}>
-                {campaign.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        
-        {selectedCampaign && (
-          <div className="mb-4">
-            <label className="block text-gray-700 mb-2">Дневной бюджет кампании (руб.)</label>
-            <input
-              type="number"
-              className="w-full px-3 py-2 border rounded-md"
-              {...register('campaignBudget', { required: 'Это поле обязательно', min: { value: 0, message: 'Значение должно быть положительным' } })}
-            />
-            {errors.campaignBudget && <p className="text-red-500 mt-1">{errors.campaignBudget.message}</p>}
+        {showMonitor && (
+          <div>
+            <BudgetMonitor userId={userId} credentials={credentials} />
           </div>
         )}
-        
-        <button
-          type="submit"
-          className="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-md"
-          disabled={loading}
-        >
-          {loading ? 'Сохранение...' : 'Сохранить настройки'}
-        </button>
-      </form>
+      </div>
     </div>
   );
 };
