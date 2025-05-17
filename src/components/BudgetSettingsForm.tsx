@@ -25,25 +25,20 @@ const BudgetSettingsForm: React.FC<BudgetSettingsFormProps> = ({ userId, credent
   
   const { register, handleSubmit, setValue, formState: { errors } } = useForm<FormValues>();
   
-  // Загрузка кампаний и настроек бюджета при монтировании компонента
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
       
-      // Загрузка кампаний из Ozon API
       const { data: campaignsData, error: campaignsError } = await getCampaignsList(credentials);
-      
       if (campaignsError) {
-        setMessage('Ошибка при загрузке кампаний: ' + campaignsError.message);
+        setMessage('Ошибка при загрузке кампаний: ' + (campaignsError as Error).message);
       } else if (campaignsData) {
         setCampaigns(campaignsData.campaigns || []);
       }
       
-      // Загрузка настроек бюджета из Supabase
       const { data: budgetData, error: budgetError } = await getBudgetSettings(userId);
-      
       if (budgetError) {
-        setMessage('Ошибка при загрузке настроек бюджета: ' + budgetError.message);
+        setMessage('Ошибка при загрузке настроек бюджета: ' + (budgetError as Error).message);
       } else if (budgetData && budgetData.length > 0) {
         setValue('dailyLimit', budgetData[0].daily_limit);
         setValue('notificationThreshold', budgetData[0].notification_threshold);
@@ -55,24 +50,19 @@ const BudgetSettingsForm: React.FC<BudgetSettingsFormProps> = ({ userId, credent
     loadData();
   }, [userId, credentials, setValue]);
   
-  // Обработчик выбора кампании
   const handleCampaignSelect = (campaignId: string) => {
     setSelectedCampaign(campaignId);
-    
-    // Найти выбранную кампанию и установить её бюджет в форму
     const campaign = campaigns.find(c => c.id === campaignId);
     if (campaign) {
       setValue('campaignBudget', campaign.dailyBudget);
     }
   };
   
-  // Обработчик отправки формы
   const onSubmit = async (data: FormValues) => {
     setLoading(true);
     setMessage('');
     
     try {
-      // Обновление общих настроек бюджета
       const { error: budgetError } = await updateBudgetSettings(
         userId,
         data.dailyLimit,
@@ -80,10 +70,9 @@ const BudgetSettingsForm: React.FC<BudgetSettingsFormProps> = ({ userId, credent
       );
       
       if (budgetError) {
-        throw new Error('Ошибка при обновлении настроек бюджета: ' + budgetError.message);
+        throw new Error('Ошибка при обновлении настроек бюджета: ' + (budgetError as Error).message);
       }
       
-      // Обновление бюджета выбранной кампании, если она выбрана
       if (selectedCampaign) {
         const { error: campaignError } = await updateCampaignBudget(
           credentials,
@@ -92,13 +81,13 @@ const BudgetSettingsForm: React.FC<BudgetSettingsFormProps> = ({ userId, credent
         );
         
         if (campaignError) {
-          throw new Error('Ошибка при обновлении бюджета кампании: ' + campaignError.message);
+          throw new Error('Ошибка при обновлении бюджета кампании: ' + (campaignError as Error).message);
         }
       }
       
       setMessage('Настройки бюджета успешно обновлены');
     } catch (error) {
-      setMessage(error.message);
+      setMessage((error as Error).message);
     } finally {
       setLoading(false);
     }
