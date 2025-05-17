@@ -5,9 +5,12 @@ WORKDIR /app
 # Copy package.json and package-lock.json
 COPY package.json package-lock.json ./
 
+# Copy .npmrc for network settings
+COPY .npmrc ./
+
 # Install dependencies using npm install instead of npm ci
-# Add flags to bypass strict checks
-RUN npm install --no-audit --no-fund --legacy-peer-deps
+# Add flags to bypass strict checks and increase network timeouts
+RUN npm install --no-audit --no-fund --legacy-peer-deps --fetch-retries=5 --fetch-retry-factor=2 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000 --timeout=120000 --network-timeout=120000
 
 # Copy the rest of the application
 COPY . .
