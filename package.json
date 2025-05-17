@@ -5,7 +5,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "preinstall": "echo 'Running preinstall script to bypass npm ci'",
+    "postinstall": "echo 'Running postinstall script'",
+    "railway:build": "npm install --no-audit --no-fund --legacy-peer-deps && next build"
   },
   "dependencies": {
     "next": "latest",
