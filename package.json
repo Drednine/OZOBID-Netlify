@@ -15,7 +15,8 @@
     "next": "latest",
     "react": "latest",
     "react-dom": "latest",
-    "react-hook-form": "^7.49.3"
+    "react-hook-form": "^7.49.3",
+    "@supabase/supabase-js": "^2.39.6"
   },
   "devDependencies": {
     "@types/axios": "^0.14.0",
