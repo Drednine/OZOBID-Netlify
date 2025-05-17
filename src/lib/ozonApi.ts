@@ -1,9 +1,8 @@
-// Типы данных для работы с Ozon API
+import axios from 'axios';
 
 export interface OzonCredentials {
   clientId: string;
   apiKey: string;
-  sellerId?: string;
 }
 
 export interface BidUpdate {
@@ -12,65 +11,76 @@ export interface BidUpdate {
   newBid: number;
 }
 
-export interface ApiResponse<T> {
-  data?: T;
-  error?: {
-    code: string;
-    message: string;
-  };
-}
-
-export interface CampaignsListResponse {
-  campaigns: Array<{
-    id: string;
-    name: string;
-    status: string;
-    budget?: number;
-  }>;
-}
-
-// Функции для работы с Ozon API
-
-/**
- * Получение списка рекламных кампаний
- */
-export async function getCampaignsList(credentials: OzonCredentials): Promise<ApiResponse<CampaignsListResponse>> {
+export const getCampaignsList = async (credentials: OzonCredentials) => {
   try {
-    // В реальном приложении здесь будет запрос к API Ozon
-    // Для демонстрации возвращаем моковые данные
-    return {
-      data: {
-        campaigns: [
-          { id: 'campaign1', name: 'Кампания 1', status: 'active' },
-          { id: 'campaign2', name: 'Кампания 2', status: 'active' },
-          { id: 'campaign3', name: 'Кампания 3', status: 'paused' }
-        ]
+    const response = await axios.post(
+      'https://api-seller.ozon.ru/v1/marketing/campaign/list',
+      {},
+      {
+        headers: {
+          'Client-Id': credentials.clientId,
+          'Api-Key': credentials.apiKey,
+          'Content-Type': 'application/json',
+        },
       }
-    };
-  } catch (error) {
-    return {
-      error: {
-        code: 'API_ERROR',
-        message: error.message || 'Ошибка при получении списка кампаний'
-      }
-    };
-  }
-}
+    );
 
-/**
- * Обновление ставок для товаров в рекламной кампании
- */
-export async function updateBids(credentials: OzonCredentials, updates: BidUpdate[]): Promise<ApiResponse<void>> {
-  try {
-    // В реальном приложении здесь будет запрос к API Ozon
-    // Для демонстрации просто возвращаем успешный результат
-    return {};
+    return { data: response.data, error: null };
   } catch (error) {
-    return {
-      error: {
-        code: 'API_ERROR',
-        message: error.message || 'Ошибка при обновлении ставок'
-      }
-    };
+    return { data: null, error };
   }
-}
+};
+
+export const updateBids = async (credentials: OzonCredentials, bids: BidUpdate[]) => {
+  try {
+    const response = await axios.post(
+      'https://api-seller.ozon.ru/v1/marketing/bid/set',
+      {
+        bids: bids.map(bid => ({
+          campaign_id: bid.campaignId,
+          product_id: bid.productId,
+          bid: bid.newBid
+        }))
+      },
+      {
+        headers: {
+          'Client-Id': credentials.clientId,
+          'Api-Key': credentials.apiKey,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    return { data: response.data, error: null };
+  } catch (error) {
+    return { data: null, error };
+  }
+};
+
+// ✅ Новый экспорт: обновление бюджета кампании
+export const updateCampaignBudget = async (
+  credentials: OzonCredentials,
+  campaignId: string,
+  newBudget: number
+) => {
+  try {
+    const response = await axios.post(
+      'https://api-seller.ozon.ru/v1/marketing/campaign/budget/update',
+      {
+        campaign_id: campaignId,
+        budget: newBudget,
+      },
+      {
+        headers: {
+          'Client-Id': credentials.clientId,
+          'Api-Key': credentials.apiKey,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    return { data: response.data, error: null };
+  } catch (error) {
+    return { data: null, error };
+  }
+};
