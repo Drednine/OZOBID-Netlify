@@ -28,7 +28,6 @@
     "eslint-config-next": "latest",
     "postcss": "latest",
     "tailwindcss": "^3.3.0",
-    "@tailwindcss/postcss": "^1.0.0",
     "typescript": "latest"
   }
 }
