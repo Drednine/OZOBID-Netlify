@@ -1,14 +1,14 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { supabase } from "@/lib/supabase";
-import MassBidManagementForm from "@/components/MassBidManagementForm";
+import React, { useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabase';
+import MassBidManagementForm from '@/components/MassBidManagementForm';
 
 export default function MassBidsPage() {
   const [user, setUser] = useState(null);
   const [credentials, setCredentials] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [error, setError] = useState('');
 
   useEffect(() => {
     checkAuth();
@@ -25,27 +25,26 @@ export default function MassBidsPage() {
         throw new Error(authError.message);
       }
       
-        throw new Error("Необходимо авторизоваться");
+        throw new Error('Необходимо авторизоваться');
       }
       
       setUser(data.user);
       
       // Получение учетных данных OZON
       const { data: credentialsData, error: credentialsError } = await supabase
-        .from("ozon_credentials")
-        .select("*")
-        .eq("user_id", data.user.id)
-        .eq("is_active", true)
+        .from('ozon_credentials')
+        .select('*')
+        .eq('user_id', data.user.id)
+        .eq('is_active', true)
         .single();
       
-        throw new Error("Необходимо добавить учетные данные OZON");
+        throw new Error('Необходимо добавить учетные данные OZON');
       }
       
       setCredentials({
         clientId: credentialsData.client_id,
         apiKey: credentialsData.api_key
       });
-      
     } catch (err) {
       setError(err.message);
     } finally {
@@ -54,11 +53,11 @@ export default function MassBidsPage() {
   };
 
   if (loading) return <div>Загрузка...</div>;
-  if (error) return <div className="text-red-500">{error}</div>;
+  if (error) return <div className='text-red-500'>{error}</div>;
 
   return (
-    <div className="container mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-6">Массовое управление ставками</h1>
+    <div className='container mx-auto p-4'>
+      <h1 className='text-2xl font-bold mb-6'>Массовое управление ставками</h1>
       <MassBidManagementForm userId={user.id} credentials={credentials} />
     </div>
   );
