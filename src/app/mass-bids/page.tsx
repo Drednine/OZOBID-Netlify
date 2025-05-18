@@ -5,8 +5,8 @@ import { supabase } from '@/lib/supabase';
 import MassBidManagementForm from '@/components/MassBidManagementForm';
 
 export default function MassBidsPage() {
-  const [user, setUser] = useState(null);
-  const [credentials, setCredentials] = useState(null);
+  const [user, setUser] = useState<any>(null);
+  const [credentials, setCredentials] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -17,19 +17,20 @@ export default function MassBidsPage() {
   const checkAuth = async () => {
     try {
       setLoading(true);
-      
+
       // Получение текущего пользователя
       const { data, error: authError } = await supabase.auth.getUser();
-      
+
       if (authError) {
         throw new Error(authError.message);
       }
-      
+
+      if (!data?.user) {
         throw new Error('Необходимо авторизоваться');
       }
-      
+
       setUser(data.user);
-      
+
       // Получение учетных данных OZON
       const { data: credentialsData, error: credentialsError } = await supabase
         .from('ozon_credentials')
@@ -37,16 +38,18 @@ export default function MassBidsPage() {
         .eq('user_id', data.user.id)
         .eq('is_active', true)
         .single();
-      
+
+      if (credentialsError || !credentialsData) {
         throw new Error('Необходимо добавить учетные данные OZON');
       }
-      
+
       setCredentials({
         clientId: credentialsData.client_id,
         apiKey: credentialsData.api_key
       });
+
     } catch (err) {
-      setError(err.message);
+      setError((err as Error).message);
     } finally {
       setLoading(false);
     }
