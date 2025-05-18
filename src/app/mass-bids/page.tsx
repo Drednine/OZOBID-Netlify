@@ -1,14 +1,14 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
-import MassBidManagementForm from '@/components/MassBidManagementForm';
-import { supabase } from '@/lib/supabase';
+import React, { useState, useEffect } from "react";
+import { supabase } from "@/lib/supabase";
+import MassBidManagementForm from "@/components/MassBidManagementForm";
 
-const MassBidPage = () => {
-  const [userId, setUserId] = useState(null);
+export default function MassBidsPage() {
+  const [user, setUser] = useState(null);
   const [credentials, setCredentials] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     checkAuth();
@@ -18,24 +18,27 @@ const MassBidPage = () => {
     try {
       setLoading(true);
       
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      // Получение текущего пользователя
+      const { data, error: authError } = await supabase.auth.getUser();
       
-      if (authError) throw new Error('Ошибка авторизации');
-      
-      setUserId(user.id);
-      
-      const { data: credentialsData, error: credentialsError } = await supabase
-        .from('ozon_credentials')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('is_active', true)
-        .single();
-      
-      if (credentialsError && credentialsError.code !== 'PGRST116') {
-        throw new Error('Ошибка при получении учетных данных');
+      if (authError) {
+        throw new Error(authError.message);
       }
       
-        throw new Error('Необходимо добавить учетные данные OZON');
+        throw new Error("Необходимо авторизоваться");
+      }
+      
+      setUser(data.user);
+      
+      // Получение учетных данных OZON
+      const { data: credentialsData, error: credentialsError } = await supabase
+        .from("ozon_credentials")
+        .select("*")
+        .eq("user_id", data.user.id)
+        .eq("is_active", true)
+        .single();
+      
+        throw new Error("Необходимо добавить учетные данные OZON");
       }
       
       setCredentials({
@@ -51,16 +54,12 @@ const MassBidPage = () => {
   };
 
   if (loading) return <div>Загрузка...</div>;
-  if (error) return <div>{error}</div>;
+  if (error) return <div className="text-red-500">{error}</div>;
 
   return (
-    <div>
-      <h1>Массовое управление ставками</h1>
-      {userId && credentials && (
-        <MassBidManagementForm userId={userId} credentials={credentials} />
-      )}
+    <div className="container mx-auto p-4">
+      <h1 className="text-2xl font-bold mb-6">Массовое управление ставками</h1>
+      <MassBidManagementForm userId={user.id} credentials={credentials} />
     </div>
   );
-};
-
-export default MassBidPage;
+}
