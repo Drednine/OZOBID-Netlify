@@ -1,111 +1,180 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { getBudgetSettings } from '@/lib/supabase';
-import { getCampaignsList, OzonCredentials } from '@/lib/ozonApi';
+import { supabase } from '@/lib/supabase';
+import { checkAndDisableCampaignsIfBudgetExceeded } from '@/lib/ozonApi';
 
 interface BudgetMonitorProps {
   userId: string;
-  credentials: OzonCredentials;
+  storeId: string;
+  credentials: {
+    clientId: string;
+    apiKey: string;
+  };
+  performanceCredentials: {
+    clientId: string;
+    apiKey: string;
+  };
+  dailyLimit: number;
+  warningThreshold: number;
+  autoDisable: boolean;
+  onBudgetExceeded?: () => void;
 }
 
-const BudgetMonitor: React.FC<BudgetMonitorProps> = ({ userId, credentials }) => {
-  const [budgetSettings, setBudgetSettings] = useState<any>(null);
-  const [campaigns, setCampaigns] = useState<any[]>([]);
-  const [message, setMessage] = useState('');
-  const [messageType, setMessageType] = useState<'success' | 'error'>('success');
-  const [loading, setLoading] = useState(false);
-  const [lastChecked, setLastChecked] = useState<string | null>(null);
+const BudgetMonitor: React.FC<BudgetMonitorProps> = ({
+  userId,
+  storeId,
+  credentials,
+  performanceCredentials,
+  dailyLimit,
+  warningThreshold,
+  autoDisable,
+  onBudgetExceeded
+}) => {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [totalSpent, setTotalSpent] = useState(0);
+  const [percentSpent, setPercentSpent] = useState(0);
+  const [isWarning, setIsWarning] = useState(false);
+  const [isExceeded, setIsExceeded] = useState(false);
+  const [campaignsDisabled, setCampaignsDisabled] = useState(0);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [campaignSpending, setCampaignSpending] = useState<Record<string, any>>({});
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
+  // Функция для проверки бюджета
+  const checkBudget = async () => {
     setLoading(true);
-    setMessage('');
+    setError(null);
 
     try {
-      const { data: budgetData, error: budgetError } = await getBudgetSettings(userId);
-      if (budgetError) {
-        throw new Error('Ошибка при загрузке настроек бюджета: ' + (budgetError as Error).message);
-      }
-      setBudgetSettings(budgetData);
+      // Проверка и отключение кампаний при превышении бюджета
+      const { data, error } = await checkAndDisableCampaignsIfBudgetExceeded(
+        credentials,
+        performanceCredentials,
+        dailyLimit,
+        autoDisable
+      );
 
-      const { data: campaignsData, error: campaignsError } = await getCampaignsList(credentials);
-      if (campaignsError) {
-        throw new Error('Ошибка при загрузке списка кампаний: ' + (campaignsError as Error).message);
+      if (error) {
+        throw new Error(error);
       }
-      setCampaigns(campaignsData?.campaigns || []);
 
-      await checkSpending();
-      setLastChecked(new Date().toLocaleTimeString());
-    } catch (error) {
-      setMessage((error as Error).message);
-      setMessageType('error');
+      // Обновление состояния
+      setTotalSpent(data.totalSpent);
+      setPercentSpent((data.totalSpent / dailyLimit) * 100);
+      setIsWarning(data.totalSpent >= (dailyLimit * warningThreshold / 100));
+      setIsExceeded(data.budgetExceeded);
+      setCampaignsDisabled(data.campaignsDisabled || 0);
+      setCampaignSpending(data.campaignSpending || {});
+      setLastUpdated(new Date());
+
+      // Сохранение данных в Supabase
+      await supabase
+        .from('budget_history')
+        .insert({
+          user_id: userId,
+          store_id: storeId,
+          date: new Date().toISOString().split('T')[0],
+          total_spent: data.totalSpent,
+          campaigns_disabled: data.budgetExceeded && autoDisable,
+          created_at: new Date().toISOString()
+        });
+
+      // Вызов колбэка при превышении бюджета
+      if (data.budgetExceeded && onBudgetExceeded) {
+        onBudgetExceeded();
+      }
+    } catch (err) {
+      setError((err as Error).message);
     } finally {
       setLoading(false);
     }
   };
 
-  const checkSpending = async () => {
-    if (!budgetSettings || !budgetSettings.campaignBudgets) return;
+  // Проверка бюджета при монтировании компонента и каждые 30 минут
+  useEffect(() => {
+    checkBudget();
+    
+    const interval = setInterval(() => {
+      checkBudget();
+    }, 30 * 60 * 1000); // 30 минут
+    
+    return () => clearInterval(interval);
+  }, [dailyLimit, warningThreshold, autoDisable]);
 
-    const alerts = budgetSettings.campaignBudgets
-      .map((budget: any) => {
-        const campaign = campaigns.find((c) => c.id === budget.campaignId);
-        if (!campaign) return null;
-
-        const spent = campaign.spent || 0;
-        const remaining = budget.budget - spent;
-        const threshold = budget.notificationThreshold || 0.1;
-
-        if (remaining < budget.budget * threshold) {
-          return `Кампания "${campaign.name}" приближается к лимиту бюджета. Осталось: ${remaining}`;
-        }
-
-        return null;
-      })
-      .filter(Boolean);
-
-    if (alerts.length > 0) {
-      setMessage(alerts.join('\n'));
-      setMessageType('error');
-    } else {
-      setMessage('Бюджеты в норме.');
-      setMessageType('success');
-    }
+  // Определение цвета индикатора
+  const getStatusColor = () => {
+    if (isExceeded) return 'bg-red-500';
+    if (isWarning) return 'bg-yellow-500';
+    return 'bg-green-500';
   };
 
   return (
-    <div className="bg-white p-4 rounded shadow-md">
-      <h2 className="text-xl font-semibold mb-4">Мониторинг бюджета</h2>
-
-      {loading && <p>Загрузка...</p>}
-
-      {message && (
-        <div
-          className={`p-3 rounded mb-4 ${
-            messageType === 'error' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
-          }`}
-        >
-          {message.split('\n').map((msg, idx) => (
-            <p key={idx}>{msg}</p>
-          ))}
+    <div className='bg-white rounded-lg shadow p-6 mb-6'>
+      <h2 className='text-xl font-semibold mb-4'>Мониторинг дневного бюджета</h2>
+      
+      {error && (
+        <div className='bg-red-100 text-red-700 p-4 rounded-md mb-4'>
+          {error}
         </div>
       )}
-
-      <button
-        onClick={loadData}
-        disabled={loading}
-        className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
-      >
-        Повторная проверка
-      </button>
-
-      {lastChecked && (
-        <p className="text-sm text-gray-500 mt-2">Последняя проверка: {lastChecked}</p>
+      
+      <div className='flex items-center mb-4'>
+        <div className={'w-3 h-3 rounded-full ' + getStatusColor() + ' mr-2'}></div>
+        <span className='font-medium'>
+          {isExceeded ? 'Бюджет превышен' : isWarning ? 'Приближение к лимиту' : 'В пределах бюджета'}
+        </span>
+      </div>
+      
+      <div className='mb-4'>
+        <div className='flex justify-between mb-1'>
+          <span>Расходы: {totalSpent.toFixed(2)} ₽ из {dailyLimit.toFixed(2)} ₽</span>
+          <span>{percentSpent.toFixed(1)}%</span>
+        </div>
+        <div className='w-full bg-gray-200 rounded-full h-2.5'>
+          <div 
+            className={'h-2.5 rounded-full ' + getStatusColor()} 
+            style={{ width: Math.min(percentSpent, 100) + '%' }}
+          ></div>
+        </div>
+      </div>
+      
+      {isExceeded && autoDisable && (
+        <div className='bg-red-50 text-red-700 p-3 rounded-md mb-4'>
+          <p>Автоматически отключено кампаний: {campaignsDisabled}</p>
+        </div>
       )}
+      
+      {Object.keys(campaignSpending).length > 0 && (
+        <div className='mt-4'>
+          <h3 className='font-medium mb-2'>Расходы по кампаниям:</h3>
+          <div className='max-h-40 overflow-y-auto'>
+            {Object.values(campaignSpending).map((campaign: any) => (
+              <div key={campaign.id} className='flex justify-between py-1 border-b border-gray-100'>
+                <span className='truncate mr-2' title={campaign.name}>
+                  {campaign.name}
+                </span>
+                <span className='font-medium'>{campaign.spent.toFixed(2)} ₽</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      
+      <div className='mt-4 text-sm text-gray-500 flex justify-between'>
+        <button 
+          onClick={checkBudget} 
+          disabled={loading}
+          className='text-blue-500 hover:text-blue-700'
+        >
+          {loading ? 'Обновление...' : 'Обновить данные'}
+        </button>
+        {lastUpdated && (
+          <span>
+            Обновлено: {lastUpdated.toLocaleTimeString()}
+          </span>
+        )}
+      </div>
     </div>
   );
 };
