@@ -18,6 +18,7 @@ const MassBidManagementForm: React.FC<MassBidManagementFormProps> = ({ userId, c
 
   const { register, handleSubmit, watch, setValue } = useForm({
     defaultValues: {
+      campaignId: '', // ✅ добавлено для устранения ошибки типов
       bidAction: 'set',
       bidValue: 100,
       minBid: 50,
