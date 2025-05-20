@@ -64,13 +64,15 @@ const BudgetMonitor: React.FC<BudgetMonitorProps> = ({
       
       // Проверка и отключение кампаний, если бюджет превышен
       if (autoDisable) {
-        const { data, error: checkError } = await checkAndDisableCampaignsIfBudgetExceeded({
-          clientId: performanceCredentials.clientId,
-          apiKey: performanceCredentials.apiKey
-        }, dailyLimit);
+        const { data, error: checkError } = await checkAndDisableCampaignsIfBudgetExceeded(
+          credentials,
+          performanceCredentials,
+          dailyLimit,
+          autoDisable
+        );
         
         if (checkError) {
-          throw new Error(checkError.message);
+          throw new Error(checkError);
         }
         
         // Обновление состояния
