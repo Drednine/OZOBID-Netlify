@@ -25,9 +25,19 @@ const BudgetSettingsForm: React.FC<BudgetSettingsFormProps> = ({ userId, credent
   const [message, setMessage] = useState('');
   const [selectedCampaign, setSelectedCampaign] = useState<string | null>(null);
   const [showMonitor, setShowMonitor] = useState(false);
+  const [storeId, setStoreId] = useState<string>('default'); // Значение по умолчанию для storeId
+  const [performanceCredentials, setPerformanceCredentials] = useState<{
+    clientId: string;
+    apiKey: string;
+  }>({
+    clientId: credentials.clientId, // Используем те же учетные данные по умолчанию
+    apiKey: credentials.apiKey
+  });
   
   const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm<FormValues>();
   const isActiveValue = watch('isActive');
+  const dailyLimitValue = watch('dailyLimit') || 0;
+  const notificationThresholdValue = watch('notificationThreshold') || 80;
   
   useEffect(() => {
     const loadData = async () => {
@@ -47,6 +57,19 @@ const BudgetSettingsForm: React.FC<BudgetSettingsFormProps> = ({ userId, credent
         setValue('dailyLimit', budgetData.daily_limit || 0);
         setValue('notificationThreshold', budgetData.notification_threshold || 80);
         setValue('isActive', budgetData.is_active !== undefined ? budgetData.is_active : true);
+        
+        // Если в настройках есть storeId, используем его
+        if (budgetData.store_id) {
+          setStoreId(budgetData.store_id);
+        }
+        
+        // Если в настройках есть данные Performance API, используем их
+        if (budgetData.performance_client_id && budgetData.performance_api_key) {
+          setPerformanceCredentials({
+            clientId: budgetData.performance_client_id,
+            apiKey: budgetData.performance_api_key
+          });
+        }
       }
       
       setLoading(false);
@@ -71,7 +94,10 @@ const BudgetSettingsForm: React.FC<BudgetSettingsFormProps> = ({ userId, credent
       const { error: budgetError } = await updateBudgetSettings(userId, {
         daily_limit: data.dailyLimit,
         notification_threshold: data.notificationThreshold,
-        is_active: data.isActive
+        is_active: data.isActive,
+        store_id: storeId,
+        performance_client_id: performanceCredentials.clientId,
+        performance_api_key: performanceCredentials.apiKey
       });
       
       if (budgetError) {
@@ -200,7 +226,15 @@ const BudgetSettingsForm: React.FC<BudgetSettingsFormProps> = ({ userId, credent
         
         {showMonitor && (
           <div>
-            <BudgetMonitor userId={userId} credentials={credentials} />
+            <BudgetMonitor 
+              userId={userId} 
+              storeId={storeId}
+              credentials={credentials}
+              performanceCredentials={performanceCredentials}
+              dailyLimit={dailyLimitValue}
+              warningThreshold={notificationThresholdValue}
+              autoDisable={isActiveValue}
+            />
           </div>
         )}
       </div>
