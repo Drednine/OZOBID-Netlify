@@ -1,2 +1,6 @@
-node_modules\n.next\n.env.local\n.env\n.DS_Store
+node_modules
+.next
+.env.local
+.env
+.DS_Store
 node_modules/@next/swc-win32-x64-msvc/next-swc.win32-x64-msvc.node
