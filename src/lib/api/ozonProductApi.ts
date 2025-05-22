@@ -1,6 +1,6 @@
 import { OzonApiClient } from './ozonApiClient';
 import { OZON_API_CONFIG } from '../config/ozon';
-import { OzonProduct } from '../types/ozon';
+import { OzonProduct, OzonProductInfoItem } from '../types/ozon';
 
 export class OzonProductApi extends OzonApiClient {
   // Получить список товаров
@@ -16,8 +16,8 @@ export class OzonProductApi extends OzonApiClient {
   }
 
   // Получить информацию о товаре
-  async getProductInfo(productId: string): Promise<OzonProduct> {
-    const response = await this.post<{ result: OzonProduct }>(
+  async getProductInfo(productId: string): Promise<OzonProductInfoItem> {
+    const response = await this.post<{ result: OzonProductInfoItem }>(
       OZON_API_CONFIG.ENDPOINTS.PRODUCT_INFO,
       {
         product_id: productId
@@ -47,12 +47,12 @@ export class OzonProductApi extends OzonApiClient {
   }
 
   // Получить товары по SKU
-  async getProductsBySku(skuList: string[]): Promise<OzonProduct[]> {
-    const products: OzonProduct[] = [];
+  async getProductsBySku(skuList: string[]): Promise<OzonProductInfoItem[]> {
+    const products: OzonProductInfoItem[] = [];
     
     for (const sku of skuList) {
       try {
-        const product = await this.post<{ result: OzonProduct }>(
+        const product = await this.post<{ result: OzonProductInfoItem }>(
           OZON_API_CONFIG.ENDPOINTS.PRODUCT_INFO,
           { sku }
         );

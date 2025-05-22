@@ -23,6 +23,18 @@ export interface OzonProduct {
   stock: number;
 }
 
+export interface OzonProductInfoItem {
+  product_id: string;
+  name: string;
+  offer_id: string;
+  category: string;
+  status: string;
+  images: string[];
+  visibility?: string;
+  stock?: number;
+  price?: number;
+}
+
 export interface OzonBudgetStats {
   campaignId: string;
   date: string;

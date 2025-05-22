@@ -9,6 +9,16 @@ import {
   getProductStock, 
   getProductPrices 
 } from '@/lib/ozonApi';
+import {
+  OzonProductListItem,
+  OzonProductListResponse,
+  OzonProductInfoItem,
+  OzonProductInfoResponse,
+  OzonProductPrice,
+  OzonProductPriceResponse,
+  OzonProductStock,
+  OzonProductStockResponse
+} from '@/lib/types/ozonProducts';
 
 interface ProductExportFormProps {
   userId: string;
@@ -80,10 +90,10 @@ const ProductExportForm: React.FC<ProductExportFormProps> = ({ userId, credentia
         setTotalProducts(data.items.length);
         
         // Получение детальной информации о товарах
-        const productIds = data.items.map(item => item.product_id);
+        const productIds = data.items.map((item: OzonProductListItem) => item.product_id);
         const batchSize = 100;
-        const productDetails = [];
-        const uniqueCategories = new Set();
+        const productDetails: Product[] = [];
+        const uniqueCategories = new Set<string>();
         
         for (let i = 0; i < productIds.length; i += batchSize) {
           setExportProgress(Math.floor((i / productIds.length) * 100));
@@ -100,9 +110,9 @@ const ProductExportForm: React.FC<ProductExportFormProps> = ({ userId, credentia
           const { data: stockData } = await getProductStock(credentials, batchIds);
           
           if (infoData && infoData.items) {
-            infoData.items.forEach((item) => {
-              const priceInfo = priceData?.items?.find((p) => p.product_id === item.product_id);
-              const stockInfo = stockData?.items?.find((s) => s.product_id === item.product_id);
+            infoData.items.forEach((item: OzonProductInfoItem) => {
+              const priceInfo = priceData?.items?.find((p: OzonProductPrice) => p.product_id === item.product_id);
+              const stockInfo = stockData?.items?.find((s: OzonProductStock) => s.product_id === item.product_id);
               
               if (item.category) {
                 uniqueCategories.add(item.category);
@@ -115,7 +125,7 @@ const ProductExportForm: React.FC<ProductExportFormProps> = ({ userId, credentia
                 category: item.category || 'Без категории',
                 price: priceInfo?.price?.price || 0,
                 oldPrice: priceInfo?.price?.old_price || 0,
-                stock: stockInfo?.stocks?.reduce((sum, s) => sum + (s.present || 0), 0) || 0,
+                stock: stockInfo?.stocks?.reduce((sum: number, s: { present: number }) => sum + (s.present || 0), 0) || 0,
                 status: item.status || 'inactive',
                 images: item.images || [],
                 url: 'https://ozon.ru/product/' + item.product_id
@@ -136,7 +146,7 @@ const ProductExportForm: React.FC<ProductExportFormProps> = ({ userId, credentia
         setCategories(categoriesArray);
         setMessage('Загружено ' + productDetails.length + ' товаров');
         
-      } catch (error) {
+      } catch (error: any) {
         setMessage('Ошибка загрузки товаров: ' + error.message);
       } finally {
         setLoading(false);
@@ -226,7 +236,8 @@ const ProductExportForm: React.FC<ProductExportFormProps> = ({ userId, credentia
       
       setMessage('Экспортировано ' + filteredProducts.length + ' товаров');
     } catch (error) {
-      setMessage('Ошибка экспорта: ' + error.message);
+      const errorMessage = error instanceof Error ? error.message : 'Неизвестная ошибка';
+      setMessage('Ошибка экспорта: ' + errorMessage);
     } finally {
       setExporting(false);
     }
