@@ -3,19 +3,3 @@
 
 // NOTE: This file should not be edited
 // see https://nextjs.org/docs/basic-features/typescript for more information.
-
-declare module 'next' {
-  interface PageConfig {
-    auth?: boolean
-    layout?: string
-  }
-}
-
-declare module 'next/dist/lib/metadata/types/metadata-interface.js' {
-  interface ResolvingMetadata {}
-  interface Metadata {}
-  interface ResolvedMetadata {}
-  interface ResolvingViewport {}
-  interface Viewport {}
-  interface ResolvedViewport {}
-}

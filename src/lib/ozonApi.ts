@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
 
 export interface OzonCredentials {
   clientId: string;
@@ -47,10 +47,16 @@ export const validateCredentials = async (credentials: OzonCredentials) => {
 
     return { valid: true, error: null };
   } catch (error) {
-    return { 
-      valid: false, 
-      error: error.response?.status === 403 ? 'Неверные учетные данные API' : 
-             error.response?.data?.message || 'Ошибка проверки учетных данных'
+    if (error instanceof AxiosError) {
+      return { 
+        valid: false, 
+        error: error.response?.status === 403 ? 'Неверные учетные данные API' : 
+               error.response?.data?.message || 'Ошибка проверки учетных данных'
+      };
+    }
+    return {
+      valid: false,
+      error: 'Неизвестная ошибка при проверке учетных данных'
     };
   }
 };
@@ -76,10 +82,16 @@ export const validatePerformanceCredentials = async (credentials: PerformanceCre
 
     return { valid: true, error: null };
   } catch (error) {
-    return { 
-      valid: false, 
-      error: error.response?.status === 403 ? 'Неверные учетные данные Performance API' : 
-             error.response?.data?.message || 'Ошибка проверки учетных данных Performance API'
+    if (error instanceof AxiosError) {
+      return { 
+        valid: false, 
+        error: error.response?.status === 403 ? 'Неверные учетные данные Performance API' : 
+               error.response?.data?.message || 'Ошибка проверки учетных данных Performance API'
+      };
+    }
+    return {
+      valid: false,
+      error: 'Неизвестная ошибка при проверке учетных данных Performance API'
     };
   }
 };
@@ -100,9 +112,15 @@ export const getCampaignsList = async (credentials: OzonCredentials) => {
 
     return { data: response.data, error: null };
   } catch (error) {
-    return { 
-      data: null, 
-      error: error.response?.data?.message || 'Ошибка получения списка кампаний' 
+    if (error instanceof AxiosError) {
+      return { 
+        data: null, 
+        error: error.response?.data?.message || 'Ошибка получения списка кампаний' 
+      };
+    }
+    return {
+      data: null,
+      error: 'Неизвестная ошибка при получении списка кампаний'
     };
   }
 };
@@ -129,9 +147,15 @@ export const updateBids = async (credentials: OzonCredentials, bids: BidUpdate[]
 
     return { data: response.data, error: null };
   } catch (error) {
-    return { 
-      data: null, 
-      error: error.response?.data?.message || 'Ошибка обновления ставок' 
+    if (error instanceof AxiosError) {
+      return { 
+        data: null, 
+        error: error.response?.data?.message || 'Ошибка обновления ставок' 
+      };
+    }
+    return {
+      data: null,
+      error: 'Неизвестная ошибка при обновлении ставок'
     };
   }
 };
@@ -160,9 +184,15 @@ export const updateCampaignBudget = async (
 
     return { data: response.data, error: null };
   } catch (error) {
-    return { 
-      data: null, 
-      error: error.response?.data?.message || 'Ошибка обновления бюджета кампании' 
+    if (error instanceof AxiosError) {
+      return { 
+        data: null, 
+        error: error.response?.data?.message || 'Ошибка обновления бюджета кампании' 
+      };
+    }
+    return {
+      data: null,
+      error: 'Неизвестная ошибка при обновлении бюджета кампании'
     };
   }
 };
@@ -192,9 +222,15 @@ export const getPerformanceStatistics = async (
 
     return { data: response.data, error: null };
   } catch (error) {
-    return { 
-      data: null, 
-      error: error.response?.data?.message || 'Ошибка получения статистики Performance API' 
+    if (error instanceof AxiosError) {
+      return { 
+        data: null, 
+        error: error.response?.data?.message || 'Ошибка получения статистики Performance API' 
+      };
+    }
+    return {
+      data: null,
+      error: 'Неизвестная ошибка при получении статистики Performance API'
     };
   }
 };
@@ -223,17 +259,43 @@ export const getCampaignsStatistics = async (
 
     return { data: response.data, error: null };
   } catch (error) {
-    return { 
-      data: null, 
-      error: error.response?.data?.message || 'Ошибка получения статистики кампаний' 
+    if (error instanceof AxiosError) {
+      return { 
+        data: null, 
+        error: error.response?.data?.message || 'Ошибка получения статистики кампаний' 
+      };
+    }
+    return {
+      data: null,
+      error: 'Неизвестная ошибка при получении статистики кампаний'
     };
   }
 };
 
 // Получение статистики расходов за сегодня
 export const getTodayStatistics = async (credentials: OzonCredentials) => {
-  const today = new Date().toISOString().split('T')[0];
-  return getCampaignsStatistics(credentials, today, today);
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const response = await getCampaignsStatistics(credentials, today, today);
+    return response;
+  } catch (error) {
+    if (error instanceof AxiosError) {
+      return { 
+        data: null, 
+        error: error.response?.data?.message || 'Ошибка получения статистики за сегодня' 
+      };
+    }
+    if (error instanceof Error) {
+      return {
+        data: null,
+        error: error.message
+      };
+    }
+    return {
+      data: null,
+      error: 'Неизвестная ошибка при получении статистики за сегодня'
+    };
+  }
 };
 
 // Изменение статуса кампании (активация/приостановка)
@@ -247,7 +309,7 @@ export const updateCampaignStatus = async (
       'https://api-seller.ozon.ru/v1/marketing/campaign/status/update',
       {
         campaign_id: campaignId,
-        status: status,
+        status: status
       },
       {
         headers: {
@@ -260,9 +322,15 @@ export const updateCampaignStatus = async (
 
     return { data: response.data, error: null };
   } catch (error) {
-    return { 
-      data: null, 
-      error: error.response?.data?.message || 'Ошибка обновления статуса кампании' 
+    if (error instanceof AxiosError) {
+      return { 
+        data: null, 
+        error: error.response?.data?.message || 'Ошибка обновления статуса кампании' 
+      };
+    }
+    return {
+      data: null,
+      error: 'Неизвестная ошибка при обновлении статуса кампании'
     };
   }
 };
@@ -273,27 +341,34 @@ export const updateCampaignsStatuses = async (
   statusUpdates: CampaignStatus[]
 ) => {
   try {
-    const promises = statusUpdates.map(update => 
-      updateCampaignStatus(credentials, update.campaignId, update.status)
+    const response = await axios.post(
+      'https://api-seller.ozon.ru/v1/marketing/campaign/status/update',
+      {
+        status_updates: statusUpdates.map(update => ({
+          campaign_id: update.campaignId,
+          status: update.status
+        }))
+      },
+      {
+        headers: {
+          'Client-Id': credentials.clientId,
+          'Api-Key': credentials.apiKey,
+          'Content-Type': 'application/json',
+        },
+      }
     );
-    
-    const results = await Promise.allSettled(promises);
-    
-    const successCount = results.filter(result => result.status === 'fulfilled').length;
-    const failedCount = results.filter(result => result.status === 'rejected').length;
-    
-    return { 
-      data: { 
-        success: successCount, 
-        failed: failedCount,
-        total: statusUpdates.length 
-      }, 
-      error: null 
-    };
+
+    return { data: response.data, error: null };
   } catch (error) {
-    return { 
-      data: null, 
-      error: error.response?.data?.message || 'Ошибка массового обновления статусов кампаний' 
+    if (error instanceof AxiosError) {
+      return { 
+        data: null, 
+        error: error.response?.data?.message || 'Ошибка обновления статусов кампаний' 
+      };
+    }
+    return {
+      data: null,
+      error: 'Неизвестная ошибка при обновлении статусов кампаний'
     };
   }
 };
@@ -307,7 +382,7 @@ export const getCampaignProducts = async (
     const response = await axios.post(
       'https://api-seller.ozon.ru/v1/marketing/campaign/products',
       {
-        campaign_id: campaignId,
+        campaign_id: campaignId
       },
       {
         headers: {
@@ -320,9 +395,15 @@ export const getCampaignProducts = async (
 
     return { data: response.data, error: null };
   } catch (error) {
-    return { 
-      data: null, 
-      error: error.response?.data?.message || 'Ошибка получения товаров кампании' 
+    if (error instanceof AxiosError) {
+      return { 
+        data: null, 
+        error: error.response?.data?.message || 'Ошибка получения товаров кампании' 
+      };
+    }
+    return {
+      data: null,
+      error: 'Неизвестная ошибка при получении товаров кампании'
     };
   }
 };
@@ -336,11 +417,11 @@ export const getProductList = async (
 ) => {
   try {
     const response = await axios.post(
-      'https://api-seller.ozon.ru/v2/product/list',
+      'https://api-seller.ozon.ru/v1/product/list',
       {
         filter,
         limit,
-        offset,
+        offset
       },
       {
         headers: {
@@ -353,9 +434,15 @@ export const getProductList = async (
 
     return { data: response.data, error: null };
   } catch (error) {
-    return { 
-      data: null, 
-      error: error.response?.data?.message || 'Ошибка получения списка товаров' 
+    if (error instanceof AxiosError) {
+      return { 
+        data: null, 
+        error: error.response?.data?.message || 'Ошибка получения списка товаров' 
+      };
+    }
+    return {
+      data: null,
+      error: 'Неизвестная ошибка при получении списка товаров'
     };
   }
 };
@@ -367,9 +454,9 @@ export const getProductInfo = async (
 ) => {
   try {
     const response = await axios.post(
-      'https://api-seller.ozon.ru/v2/product/info/list',
+      'https://api-seller.ozon.ru/v2/product/info',
       {
-        product_id: productIds,
+        product_id: productIds
       },
       {
         headers: {
@@ -382,9 +469,15 @@ export const getProductInfo = async (
 
     return { data: response.data, error: null };
   } catch (error) {
-    return { 
-      data: null, 
-      error: error.response?.data?.message || 'Ошибка получения информации о товарах' 
+    if (error instanceof AxiosError) {
+      return { 
+        data: null, 
+        error: error.response?.data?.message || 'Ошибка получения информации о товарах' 
+      };
+    }
+    return {
+      data: null,
+      error: 'Неизвестная ошибка при получении информации о товарах'
     };
   }
 };
@@ -396,9 +489,9 @@ export const getProductStock = async (
 ) => {
   try {
     const response = await axios.post(
-      'https://api-seller.ozon.ru/v3/product/info/stocks',
+      'https://api-seller.ozon.ru/v2/product/info/stocks',
       {
-        product_id: productIds,
+        product_id: productIds
       },
       {
         headers: {
@@ -411,9 +504,15 @@ export const getProductStock = async (
 
     return { data: response.data, error: null };
   } catch (error) {
-    return { 
-      data: null, 
-      error: error.response?.data?.message || 'Ошибка получения информации об остатках' 
+    if (error instanceof AxiosError) {
+      return { 
+        data: null, 
+        error: error.response?.data?.message || 'Ошибка получения информации об остатках' 
+      };
+    }
+    return {
+      data: null,
+      error: 'Неизвестная ошибка при получении информации об остатках'
     };
   }
 };
@@ -425,9 +524,9 @@ export const getProductPrices = async (
 ) => {
   try {
     const response = await axios.post(
-      'https://api-seller.ozon.ru/v4/product/info/prices',
+      'https://api-seller.ozon.ru/v2/product/info/prices',
       {
-        product_id: productIds,
+        product_id: productIds
       },
       {
         headers: {
@@ -440,9 +539,15 @@ export const getProductPrices = async (
 
     return { data: response.data, error: null };
   } catch (error) {
-    return { 
-      data: null, 
-      error: error.response?.data?.message || 'Ошибка получения информации о ценах' 
+    if (error instanceof AxiosError) {
+      return { 
+        data: null, 
+        error: error.response?.data?.message || 'Ошибка получения информации о ценах' 
+      };
+    }
+    return {
+      data: null,
+      error: 'Неизвестная ошибка при получении информации о ценах'
     };
   }
 };
@@ -466,9 +571,15 @@ export const getCategories = async (
 
     return { data: response.data, error: null };
   } catch (error) {
-    return { 
-      data: null, 
-      error: error.response?.data?.message || 'Ошибка получения категорий товаров' 
+    if (error instanceof AxiosError) {
+      return { 
+        data: null, 
+        error: error.response?.data?.message || 'Ошибка получения списка категорий' 
+      };
+    }
+    return {
+      data: null,
+      error: 'Неизвестная ошибка при получении списка категорий'
     };
   }
 };
@@ -481,21 +592,20 @@ export const getProductsStatistics = async (
   campaignIds: string[] = []
 ) => {
   try {
-    const payload: any = {
-      "dateFrom": dateFrom,
-      "dateTo": dateTo,
-      "groupBy": ["DATE", "CAMPAIGN_ID", "SKU"]
-    };
-    
-    if (campaignIds.length > 0) {
-      payload.filter = {
-        "campaignIds": campaignIds
-      };
-    }
-    
     const response = await axios.post(
       'https://performance.ozon.ru/api/client/statistics',
-      payload,
+      {
+        "dateFrom": dateFrom,
+        "dateTo": dateTo,
+        "groupBy": ["DATE", "CAMPAIGN_ID", "PRODUCT_ID"],
+        "filters": campaignIds.length > 0 ? [
+          {
+            "field": "CAMPAIGN_ID",
+            "operator": "IN",
+            "values": campaignIds
+          }
+        ] : []
+      },
       {
         headers: {
           'Client-Id': credentials.clientId,
@@ -507,14 +617,29 @@ export const getProductsStatistics = async (
 
     return { data: response.data, error: null };
   } catch (error) {
-    return { 
-      data: null, 
-      error: error.response?.data?.message || 'Ошибка получения статистики по товарам' 
+    if (error instanceof AxiosError) {
+      return { 
+        data: null, 
+        error: error.response?.data?.message || 'Ошибка получения статистики по товарам' 
+      };
+    }
+    return {
+      data: null,
+      error: 'Неизвестная ошибка при получении статистики по товарам'
     };
   }
 };
 
-// Проверка и отключение кампаний при превышении дневного бюджета
+interface StatisticsRow {
+  date: string;
+  campaignId: string;
+  spend: number;
+  dimensions: Array<{
+    id: string;
+    value: string;
+  }>;
+}
+
 export const checkAndDisableCampaignsIfBudgetExceeded = async (
   credentials: OzonCredentials,
   performanceCredentials: PerformanceCredentials,
@@ -522,96 +647,61 @@ export const checkAndDisableCampaignsIfBudgetExceeded = async (
   autoDisable: boolean = true
 ) => {
   try {
-    // Получаем статистику расходов за сегодня
     const today = new Date().toISOString().split('T')[0];
-    const { data: statsData, error: statsError } = await getPerformanceStatistics(
-      performanceCredentials,
-      today,
-      today
-    );
+    const { data: statsData } = await getPerformanceStatistics(performanceCredentials, today, today);
     
-    if (statsError) {
-      throw new Error(statsError);
+    if (!statsData || !statsData.rows) {
+      throw new Error('Не удалось получить статистику');
     }
-    
-    // Рассчитываем общие расходы
-    let totalSpent = 0;
-    const campaignSpending = {};
-    
-    if (statsData && statsData.rows) {
-      statsData.rows.forEach(row => {
+
+    const campaignsToDisable = (statsData.rows as StatisticsRow[])
+      .reduce((acc: { [key: string]: StatisticsRow }, row: StatisticsRow) => {
         const campaignId = row.dimensions.find(d => d.id === 'CAMPAIGN_ID')?.value;
-        const campaignName = row.dimensions.find(d => d.id === 'CAMPAIGN_NAME')?.value;
-        const spent = row.metrics.find(m => m.id === 'SPENDING')?.value || 0;
+        if (!campaignId) return acc;
         
-        if (campaignId) {
-          campaignSpending[campaignId] = {
-            id: campaignId,
-            name: campaignName,
-            spent: parseFloat(spent)
-          };
-          totalSpent += parseFloat(spent);
+        if (!acc[campaignId]) {
+          acc[campaignId] = row;
+        } else {
+          acc[campaignId].spend += row.spend;
         }
-      });
+        return acc;
+      }, {});
+
+    const overBudgetCampaigns = Object.values(campaignsToDisable)
+      .filter(row => row.spend > dailyBudget)
+      .map(row => row.dimensions.find(d => d.id === 'CAMPAIGN_ID')?.value)
+      .filter((id): id is string => id !== undefined);
+
+    if (overBudgetCampaigns.length > 0 && autoDisable) {
+      await updateCampaignsStatuses(credentials, overBudgetCampaigns.map(id => ({
+        campaignId: id,
+        status: 'paused'
+      })));
     }
-    
-    // Проверяем, превышен ли дневной бюджет
-    const isBudgetExceeded = totalSpent >= dailyBudget;
-    
-    // Если бюджет превышен и включено автоотключение, отключаем все активные кампании
-    if (isBudgetExceeded && autoDisable) {
-      // Получаем список активных кампаний
-      const { data: campaignsData, error: campaignsError } = await getCampaignsList(credentials);
-      
-      if (campaignsError) {
-        throw new Error(campaignsError);
-      }
-      
-      const activeCampaigns = campaignsData?.campaigns?.filter(c => c.state === 'active') || [];
-      
-      // Отключаем все активные кампании
-      if (activeCampaigns.length > 0) {
-        const statusUpdates = activeCampaigns.map(campaign => ({
-          campaignId: campaign.id,
-          status: 'paused' as 'paused'
-        }));
-        
-        const { data: updateResult, error: updateError } = await updateCampaignsStatuses(
-          credentials,
-          statusUpdates
-        );
-        
-        if (updateError) {
-          throw new Error(updateError);
-        }
-        
-        return {
-          data: {
-            budgetExceeded: true,
-            totalSpent,
-            dailyBudget,
-            campaignsDisabled: updateResult.success,
-            campaignSpending
-          },
-          error: null
-        };
-      }
-    }
-    
+
     return {
       data: {
-        budgetExceeded: isBudgetExceeded,
-        totalSpent,
-        dailyBudget,
-        campaignsDisabled: 0,
-        campaignSpending
+        overBudgetCampaigns,
+        disabledCampaigns: autoDisable ? overBudgetCampaigns : []
       },
       error: null
     };
   } catch (error) {
-    return { 
-      data: null, 
-      error: error.message || 'Ошибка проверки и отключения кампаний' 
+    if (error instanceof AxiosError) {
+      return {
+        data: null,
+        error: error.response?.data?.message || 'Ошибка при проверке и отключении кампаний'
+      };
+    }
+    if (error instanceof Error) {
+      return {
+        data: null,
+        error: error.message
+      };
+    }
+    return {
+      data: null,
+      error: 'Неизвестная ошибка при проверке и отключении кампаний'
     };
   }
 };

@@ -21,9 +21,9 @@ interface BudgetMonitorProps {
 }
 
 interface BudgetData {
-  totalSpent: number;
-  budgetExceeded: boolean;
-  lastChecked: string;
+  total_spent: number;
+  budget_exceeded: boolean;
+  last_checked: string;
 }
 
 const BudgetMonitor: React.FC<BudgetMonitorProps> = ({
@@ -77,14 +77,17 @@ const BudgetMonitor: React.FC<BudgetMonitorProps> = ({
         
         // Обновление состояния
         if (data) {
-          setTotalSpent(data.totalSpent || 0);
-          setPercentSpent(((data.totalSpent || 0) / dailyLimit) * 100);
-          setIsWarning((data.totalSpent || 0) >= (dailyLimit * warningThreshold / 100));
-          setIsExceeded(data.budgetExceeded || false);
-          setLastChecked(new Date().toISOString());
+          const isExceeded = data.overBudgetCampaigns.length > 0;
+          const currentTime = new Date().toISOString();
+          
+          setTotalSpent(budgetData?.total_spent || 0);
+          setPercentSpent(((budgetData?.total_spent || 0) / dailyLimit) * 100);
+          setIsWarning((budgetData?.total_spent || 0) >= (dailyLimit * warningThreshold / 100));
+          setIsExceeded(isExceeded);
+          setLastChecked(currentTime);
           
           // Вызов колбэка, если бюджет превышен
-          if (data.budgetExceeded && onBudgetExceeded) {
+          if (isExceeded && onBudgetExceeded) {
             onBudgetExceeded();
           }
           
@@ -94,9 +97,9 @@ const BudgetMonitor: React.FC<BudgetMonitorProps> = ({
             .upsert({
               user_id: userId,
               store_id: storeId,
-              total_spent: data.totalSpent || 0,
-              budget_exceeded: data.budgetExceeded || false,
-              last_checked: new Date().toISOString()
+              total_spent: budgetData?.total_spent || 0,
+              budget_exceeded: isExceeded,
+              last_checked: currentTime
             });
         }
       } else {
