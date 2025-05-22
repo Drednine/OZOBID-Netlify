@@ -3,8 +3,9 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import MassBidManagementForm from '@/components/MassBidManagementForm';
+import type { NextPage } from 'next';
 
-export default function MassBidsPage() {
+const MassBidsPage: NextPage = () => {
   const [user, setUser] = useState<any>(null);
   const [credentials, setCredentials] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -64,4 +65,6 @@ export default function MassBidsPage() {
       <MassBidManagementForm userId={user.id} credentials={credentials} />
     </div>
   );
-}
+};
+
+export default MassBidsPage;

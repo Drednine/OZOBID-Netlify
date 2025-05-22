@@ -3,8 +3,9 @@
 import React, { useState, useEffect } from 'react';
 import BudgetSettingsForm from '@/components/BudgetSettingsForm';
 import { supabase } from '@/lib/supabase';
+import type { NextPage } from 'next';
 
-const BudgetPage = () => {
+const BudgetPage: NextPage = () => {
   const [userId, setUserId] = useState<string | null>(null);
   const [credentials, setCredentials] = useState<any>(null);
   const [loading, setLoading] = useState(true);

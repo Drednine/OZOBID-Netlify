@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import RegisterForm from '@/components/RegisterForm';
 import MultiStoreForm from '@/components/MultiStoreForm';
 import ProductExportForm from '@/components/ProductExportForm';
+import type { NextPage } from 'next';
 
 const userId = 'mock-user-id'; // Заменить на реальный ID при интеграции
 const credentials = {
@@ -11,7 +12,7 @@ const credentials = {
   apiKey: 'your-api-key'
 }; // Тоже можно заменить на реальные данные из Supabase или формы
 
-export default function Home() {
+const HomePage: NextPage = () => {
   const [active, setActive] = useState<'register' | 'stores' | 'export'>('register');
 
   return (
@@ -48,4 +49,6 @@ export default function Home() {
       </div>
     </div>
   );
-}
+};
+
+export default HomePage;
