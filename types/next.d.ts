@@ -1,14 +1,10 @@
-/// <reference types="next" />
-/// <reference types="next/image-types/global" />
-
-// NOTE: This file should not be edited
-// see https://nextjs.org/docs/basic-features/typescript for more information.
+import type { NextPage } from 'next';
+import type { ReactElement, ReactNode } from 'react';
 
 declare module 'next' {
-  interface PageConfig {
-    auth?: boolean
-    layout?: string
-  }
+  export type NextPageWithLayout<P = {}, IP = P> = NextPage<P, IP> & {
+    getLayout?: (page: ReactElement) => ReactNode;
+  };
 }
 
 declare module 'next/dist/lib/metadata/types/metadata-interface.js' {
@@ -18,4 +14,4 @@ declare module 'next/dist/lib/metadata/types/metadata-interface.js' {
   interface ResolvingViewport {}
   interface Viewport {}
   interface ResolvedViewport {}
-}
+} 
