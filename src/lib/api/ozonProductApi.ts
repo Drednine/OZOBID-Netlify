@@ -1,6 +1,6 @@
 import { OzonApiClient } from './ozonApiClient';
 import { OZON_API_CONFIG } from '../config/ozon';
-import { OzonProduct, OzonProductInfoItem } from '../types/ozon';
+import { OzonProduct, OzonProductInfoItem, OzonApiResponse } from '../types/ozon';
 
 export class OzonProductApi extends OzonApiClient {
   // Получить список товаров
@@ -23,7 +23,7 @@ export class OzonProductApi extends OzonApiClient {
         product_id: productId
       }
     );
-    return response.result;
+    return response.result.result;
   }
 
   // Обновить информацию о товаре
@@ -56,7 +56,7 @@ export class OzonProductApi extends OzonApiClient {
           OZON_API_CONFIG.ENDPOINTS.PRODUCT_INFO,
           { sku }
         );
-        products.push(product.result);
+        products.push(product.result.result);
       } catch (error) {
         console.error(`Ошибка при получении товара с SKU ${sku}:`, error);
       }
