@@ -50,7 +50,10 @@ CREATE TABLE IF NOT EXISTS public.budget_settings (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
     notification_threshold NUMERIC,
-    is_active BOOLEAN DEFAULT true
+    is_active BOOLEAN DEFAULT true,
+    store_id TEXT,
+    performance_client_id TEXT,
+    performance_api_key TEXT
 );
 
 -- Включение Row Level Security

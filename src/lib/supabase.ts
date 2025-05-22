@@ -14,6 +14,9 @@ export interface BudgetSettings {
   is_active: boolean;
   created_at?: string;
   updated_at?: string;
+  store_id?: string;
+  performance_client_id?: string;
+  performance_api_key?: string;
 }
 
 // Типы для мониторинга расходов
