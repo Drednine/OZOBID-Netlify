@@ -2,12 +2,18 @@ FROM node:18-alpine AS builder
 
 WORKDIR /app
 
+# Create app directory and set permissions
+RUN mkdir -p /app && chown -R node:node /app
+
+# Switch to non-root user
+USER node
+
 # Install dependencies
-COPY package.json package-lock.json ./
+COPY --chown=node:node package.json package-lock.json ./
 RUN npm install --production
 
 # Copy source code
-COPY . .
+COPY --chown=node:node . .
 
 # Build application
 RUN npm run build
@@ -16,23 +22,22 @@ RUN npm run build
 FROM node:18-alpine AS runner
 WORKDIR /app
 
+# Create app directory and set permissions
+RUN mkdir -p /app && chown -R node:node /app
+
+# Switch to non-root user
+USER node
+
 # Copy necessary files from builder
-COPY --from=builder /app/package.json .
-COPY --from=builder /app/package-lock.json .
-COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/node_modules ./node_modules
+COPY --chown=node:node --from=builder /app/package.json .
+COPY --chown=node:node --from=builder /app/package-lock.json .
+COPY --chown=node:node --from=builder /app/.next ./.next
+COPY --chown=node:node --from=builder /app/public ./public
+COPY --chown=node:node --from=builder /app/node_modules ./node_modules
 
 # Set environment variables
 ENV NODE_ENV production
 ENV NEXT_TELEMETRY_DISABLED 1
-
-# Create system user
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
-RUN chown -R nextjs:nodejs /app
-
-USER nextjs
 
 EXPOSE 3000
 
