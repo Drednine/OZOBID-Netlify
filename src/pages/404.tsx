@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
  
-export default function NotFound() {
+export default function Custom404() {
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100">
       <h2 className="text-4xl font-bold text-gray-800 mb-4">404 - Страница не найдена</h2>
@@ -15,4 +15,4 @@ export default function NotFound() {
       </Link>
     </div>
   )
-}
+} 
