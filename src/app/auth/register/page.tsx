@@ -33,8 +33,8 @@ export default function RegisterPage() {
         password: data.password,
         options: {
           data: {
-            full_name: data.fullName,
-            company_name: data.companyName
+            fullName: data.fullName,
+            companyName: data.companyName
           }
         }
       });
@@ -44,22 +44,6 @@ export default function RegisterPage() {
       }
 
       if (authData && authData.user) {
-        // Создание записи в таблице пользователей
-        const { error: profileError } = await supabase
-          .from('users')
-          .insert([
-            {
-              id: authData.user.id,
-              email: data.email,
-              full_name: data.fullName,
-              company_name: data.companyName
-            }
-          ]);
-
-        if (profileError) {
-          throw new Error(profileError.message);
-        }
-
         router.push('/auth/verify-email');
       }
     } catch (err) {
