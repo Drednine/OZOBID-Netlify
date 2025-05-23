@@ -11,9 +11,7 @@ const nextConfig = {
     NEXT_PUBLIC_OZON_API_URL: process.env.NEXT_PUBLIC_OZON_API_URL,
   },
   output: 'standalone',
-  experimental: {
-    missingSuspenseWithCSRBailout: false
-  }
+  allowedDevOrigins: ['http://10.8.0.2:3000']
 };
 
 module.exports = nextConfig;

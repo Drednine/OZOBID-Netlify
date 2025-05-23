@@ -1,6 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabase';
 import RegisterForm from '@/components/RegisterForm';
 import MultiStoreForm from '@/components/MultiStoreForm';
 import ProductExportForm from '@/components/ProductExportForm';
@@ -12,43 +14,26 @@ const credentials = {
   apiKey: 'your-api-key'
 }; // Тоже можно заменить на реальные данные из Supabase или формы
 
-const HomePage: NextPage = () => {
-  const [active, setActive] = useState<'register' | 'stores' | 'export'>('register');
+export default function HomePage() {
+  const router = useRouter();
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        router.push('/auth/login');
+      } else {
+        router.push('/dashboard');
+      }
+    };
+
+    checkAuth();
+  }, [router]);
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-4xl mx-auto">
-        <h1 className="text-3xl font-bold mb-6">Панель OZOBID</h1>
-
-        <div className="flex gap-4 mb-6">
-          <button
-            onClick={() => setActive('register')}
-            className={`px-4 py-2 rounded ${active === 'register' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}
-          >
-            Регистрация
-          </button>
-          <button
-            onClick={() => setActive('stores')}
-            className={`px-4 py-2 rounded ${active === 'stores' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}
-          >
-            Магазины
-          </button>
-          <button
-            onClick={() => setActive('export')}
-            className={`px-4 py-2 rounded ${active === 'export' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}
-          >
-            Выгрузка товаров
-          </button>
-        </div>
-
-        <div className="bg-white rounded-lg shadow p-6">
-          {active === 'register' && <RegisterForm />}
-          {active === 'stores' && <MultiStoreForm userId={userId} />}
-          {active === 'export' && <ProductExportForm userId={userId} credentials={credentials} />}
-        </div>
-      </div>
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
     </div>
   );
-};
-
-export default HomePage;
+}
