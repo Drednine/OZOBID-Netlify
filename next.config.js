@@ -11,7 +11,11 @@ const nextConfig = {
     NEXT_PUBLIC_OZON_API_URL: process.env.NEXT_PUBLIC_OZON_API_URL,
   },
   output: 'standalone',
-  allowedDevOrigins: ['http://10.8.0.2:3000']
+  allowedDevOrigins: ['http://10.8.0.2:3000'],
+  experimental: {
+    // Отключаем статическую генерацию для страниц с ошибками
+    staticPageGenerationTimeout: 0,
+  }
 };
 
 module.exports = nextConfig;
