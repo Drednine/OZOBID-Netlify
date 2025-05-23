@@ -10,7 +10,10 @@ const nextConfig = {
     NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
     NEXT_PUBLIC_OZON_API_URL: process.env.NEXT_PUBLIC_OZON_API_URL,
   },
-  output: 'standalone'
+  output: 'standalone',
+  experimental: {
+    missingSuspenseWithCSRBailout: false
+  }
 };
 
 module.exports = nextConfig;
