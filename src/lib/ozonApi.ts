@@ -33,22 +33,22 @@ export interface ProductFilter {
 // Проверка валидности API-ключей
 export const validateCredentials = async (credentials: OzonCredentials) => {
   try {
-    const response = await axios.post(
-      'https://api-seller.ozon.ru/v1/product/list', // Возвращаем на /v1/product/list
-      { limit: 1 }, // Минимальный параметр для /v1/product/list
+    // Используем GET-запрос к эндпоинту /v1/supplier/available_warehouses для валидации
+    const response = await axios.get(
+      'https://api-seller.ozon.ru/v1/supplier/available_warehouses',
       {
         headers: {
           'Client-Id': credentials.clientId,
           'Api-Key': credentials.apiKey,
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/json', // Content-Type может быть не обязателен для GET, но оставим для единообразия
         },
       }
     );
-    // Для /v1/product/list успешный ответ содержит result.items или просто result
-    if (response.data && response.data.result) {
+    // Успешный ответ должен содержать данные
+    if (response.data && response.status === 200) {
       return { valid: true, error: null };
     } else {
-      return { valid: false, error: 'Неожиданный ответ от Ozon API (v1/product/list) при проверке Seller API' };
+      return { valid: false, error: 'Неожиданный ответ от Ozon API (v1/supplier/available_warehouses) при проверке Seller API' };
     }
   } catch (error) {
     if (error instanceof AxiosError) {
@@ -56,7 +56,7 @@ export const validateCredentials = async (credentials: OzonCredentials) => {
       if (error.response?.status === 403) {
         errorMessage = 'Неверные учетные данные Seller API (403)';
       } else if (error.response?.status === 404) {
-        errorMessage = 'Эндпоинт проверки Seller API не найден (404)';
+        errorMessage = 'Эндпоинт проверки Seller API (/v1/supplier/available_warehouses) не найден (404)';
       }
       if (error.response?.data) {
         const ozonError = error.response.data as any;
@@ -156,7 +156,9 @@ export const validatePerformanceCredentials = async (credentials: PerformanceCre
   }
 };
 
-// ... (остальная часть файла без изменений) ...
+// ... (остальная часть файла src/lib/ozonApi.ts остается без изменений) ...
+// (здесь должен быть остальной код файла: getCampaignsList, updateBids, и т.д.)
+// Я его не привожу здесь для краткости, но он должен остаться таким же, как в предыдущем моем сообщении с полным кодом файла.
 
 export const getCampaignsList = async (credentials: OzonCredentials) => {
   try {
