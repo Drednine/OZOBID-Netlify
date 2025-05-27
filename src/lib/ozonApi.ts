@@ -33,9 +33,9 @@ export interface ProductFilter {
 // Проверка валидности API-ключей
 export const validateCredentials = async (credentials: OzonCredentials) => {
   try {
-    const response = await axios.post(
-      'https://api-seller.ozon.ru/v2/product/list',
-      { filter: { visibility: "ALL" }, limit: 1 },
+    // Используем GET-запрос к эндпоинту /v1/supplier/available_warehouses для валидации
+    const response = await axios.get(
+      'https://api-seller.ozon.ru/v1/supplier/available_warehouses',
       {
         headers: {
           'Client-Id': credentials.clientId,
@@ -44,27 +44,60 @@ export const validateCredentials = async (credentials: OzonCredentials) => {
         },
       }
     );
-
-    return { valid: true, error: null };
+    // Успешный ответ должен содержать данные и статус 200
+    if (response.data && response.status === 200) {
+      return { valid: true, error: null };
+    } else {
+      return { valid: false, error: `Неожиданный ответ от Ozon API (v1/supplier/available_warehouses) при проверке Seller API (status: ${response.status})` };
+    }
   } catch (error) {
     if (error instanceof AxiosError) {
       let errorMessage = 'Ошибка проверки учетных данных Seller API';
-      if (error.response?.status === 403) {
-        errorMessage = 'Неверные учетные данные Seller API';
-      }
-      if (error.response?.data) {
-        // Попытаемся добавить больше деталей из ответа Ozon
-        const ozonErrorMessage = typeof error.response.data === 'string' ? error.response.data : JSON.stringify(error.response.data);
-        errorMessage += `: ${ozonErrorMessage}`;
+      if (error.isAxiosError && !error.response) {
+        errorMessage = `Сетевая ошибка при обращении к Seller API: ${error.message}`;
+        if (error.code) {
+            errorMessage += ` (Code: ${error.code})`;
+        }
+      } else if (error.response) {
+        if (error.response.status === 403) {
+          errorMessage = 'Неверные учетные данные Seller API (403)';
+        } else if (error.response.status === 404) {
+          errorMessage = 'Эндпоинт проверки Seller API (/v1/supplier/available_warehouses) не найден (404)';
+        } else {
+            errorMessage = `Ошибка от Seller API (status: ${error.response.status})`;
+        }
+        
+        if (error.response.data) {
+          const ozonError = error.response.data as any;
+          let details = '';
+          if (typeof ozonError === 'string') {
+            details = ozonError;
+          } else if (ozonError.message) {
+            details = ozonError.message;
+          } else if (ozonError.error && ozonError.error.message) {
+            details = ozonError.error.message;
+            if (ozonError.error.data) {
+               details += ` (${JSON.stringify(ozonError.error.data)})`;
+            }
+          } else if (ozonError.code && ozonError.message) { 
+              details = `Code: ${ozonError.code}, Message: ${ozonError.message}`;
+          } else {
+            details = JSON.stringify(ozonError);
+          }
+          errorMessage += `: ${details}`;
+        }
+      } else {
+         errorMessage = `Ошибка Axios при обращении к Seller API: ${error.message}`;
       }
       return { 
         valid: false, 
         error: errorMessage
       };
     }
+    const unknownError = error as Error;
     return {
       valid: false,
-      error: 'Неизвестная ошибка при проверке учетных данных Seller API'
+      error: `Неизвестная ошибка при проверке Seller API: ${unknownError.message || 'No error message'}`
     };
   }
 };
@@ -87,9 +120,9 @@ export const validatePerformanceCredentials = async (credentials: PerformanceCre
         },
       }
     );
-     if (response.data && (response.data.result !== undefined || Array.isArray(response.data.rows) || response.data.total !== undefined || typeof response.data === 'string')) { // Добавил string для случая пустого ответа ""
+     if (response.data && (response.data.result !== undefined || Array.isArray(response.data.rows) || response.data.total !== undefined || typeof response.data === 'string')) {
         return { valid: true, error: null };
-    } else if (response.status === 200 && (response.data === null || response.data === "")) { // Учел пустой ответ при статусе 200
+    } else if (response.status === 200 && (response.data === null || response.data === "")) { 
         return { valid: true, error: null }; 
     } else {
         return { valid: false, error: `Неожиданный ответ от Ozon Performance API (status: ${response.status})` };
@@ -98,14 +131,11 @@ export const validatePerformanceCredentials = async (credentials: PerformanceCre
     if (error instanceof AxiosError) {
       let errorMessage = 'Ошибка проверки учетных данных Performance API';
       if (error.isAxiosError && !error.response) {
-        // Это может быть настоящая сетевая ошибка (DNS, нет соединения и т.д.)
         errorMessage = `Сетевая ошибка при обращении к Performance API: ${error.message}`;
         if (error.code) {
             errorMessage += ` (Code: ${error.code})`;
         }
-        // Можно добавить больше деталей из error.request или error.config, если нужно
       } else if (error.response) {
-        // Ошибка от сервера Ozon
         if (error.response.status === 403) {
           errorMessage = 'Неверные учетные данные Performance API (403)';
         } else if (error.response.status === 404) {
@@ -134,7 +164,6 @@ export const validatePerformanceCredentials = async (credentials: PerformanceCre
           errorMessage += `: ${details}`;
         }
       } else {
-        // Другие ошибки Axios
          errorMessage = `Ошибка Axios при обращении к Performance API: ${error.message}`;
       }
       return { 
@@ -142,7 +171,6 @@ export const validatePerformanceCredentials = async (credentials: PerformanceCre
         error: errorMessage
       };
     }
-    // Не Axios ошибка (например, ошибка в логике до запроса)
     const unknownError = error as Error;
     return {
       valid: false,
