@@ -77,7 +77,7 @@ export const validatePerformanceCredentials = async (credentials: PerformanceCre
       {
         "dateFrom": new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
         "dateTo": new Date().toISOString().split('T')[0],
-        "groupBy": ["DATE"]
+        "groupBy": ["DATE"] // Минимальная группировка для запроса
       },
       {
         headers: {
@@ -87,19 +87,66 @@ export const validatePerformanceCredentials = async (credentials: PerformanceCre
         },
       }
     );
-
-    return { valid: true, error: null };
+     if (response.data && (response.data.result !== undefined || Array.isArray(response.data.rows) || response.data.total !== undefined || typeof response.data === 'string')) { // Добавил string для случая пустого ответа ""
+        return { valid: true, error: null };
+    } else if (response.status === 200 && (response.data === null || response.data === "")) { // Учел пустой ответ при статусе 200
+        return { valid: true, error: null }; 
+    } else {
+        return { valid: false, error: `Неожиданный ответ от Ozon Performance API (status: ${response.status})` };
+    }
   } catch (error) {
     if (error instanceof AxiosError) {
+      let errorMessage = 'Ошибка проверки учетных данных Performance API';
+      if (error.isAxiosError && !error.response) {
+        // Это может быть настоящая сетевая ошибка (DNS, нет соединения и т.д.)
+        errorMessage = `Сетевая ошибка при обращении к Performance API: ${error.message}`;
+        if (error.code) {
+            errorMessage += ` (Code: ${error.code})`;
+        }
+        // Можно добавить больше деталей из error.request или error.config, если нужно
+      } else if (error.response) {
+        // Ошибка от сервера Ozon
+        if (error.response.status === 403) {
+          errorMessage = 'Неверные учетные данные Performance API (403)';
+        } else if (error.response.status === 404) {
+          errorMessage = 'Эндпоинт проверки Performance API не найден (404)';
+        } else {
+          errorMessage = `Ошибка от Performance API (status: ${error.response.status})`;
+        }
+        
+        if (error.response.data) {
+          const ozonError = error.response.data as any;
+          let details = '';
+          if (typeof ozonError === 'string') {
+            details = ozonError;
+          } else if (ozonError.message) {
+            details = ozonError.message;
+          } else if (ozonError.error && ozonError.error.message) {
+            details = ozonError.error.message;
+            if (ozonError.error.data) {
+               details += ` (${JSON.stringify(ozonError.error.data)})`;
+            }
+          } else if (ozonError.code && ozonError.message) { 
+              details = `Code: ${ozonError.code}, Message: ${ozonError.message}`;
+          } else {
+            details = JSON.stringify(ozonError);
+          }
+          errorMessage += `: ${details}`;
+        }
+      } else {
+        // Другие ошибки Axios
+         errorMessage = `Ошибка Axios при обращении к Performance API: ${error.message}`;
+      }
       return { 
         valid: false, 
-        error: error.response?.status === 403 ? 'Неверные учетные данные Performance API' : 
-               error.response?.data?.message || 'Ошибка проверки учетных данных Performance API'
+        error: errorMessage
       };
     }
+    // Не Axios ошибка (например, ошибка в логике до запроса)
+    const unknownError = error as Error;
     return {
       valid: false,
-      error: 'Неизвестная ошибка при проверке учетных данных Performance API'
+      error: `Неизвестная ошибка при проверке Performance API: ${unknownError.message || 'No error message'}`
     };
   }
 };
