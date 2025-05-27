@@ -34,8 +34,8 @@ export interface ProductFilter {
 export const validateCredentials = async (credentials: OzonCredentials) => {
   try {
     const response = await axios.post(
-      'https://api-seller.ozon.ru/v2/product/list',
-      { filter: { visibility: "ALL" }, limit: 1 },
+      'https://api-seller.ozon.ru/v1/product/list', // Возвращаем на /v1/product/list
+      { limit: 1 }, // Минимальный параметр для /v1/product/list
       {
         headers: {
           'Client-Id': credentials.clientId,
@@ -44,27 +44,28 @@ export const validateCredentials = async (credentials: OzonCredentials) => {
         },
       }
     );
-    // Если запрос успешен, Ozon должен вернуть объект с полем result
-    if (response.data && typeof response.data.result !== 'undefined') {
+    // Для /v1/product/list успешный ответ содержит result.items или просто result
+    if (response.data && response.data.result) {
       return { valid: true, error: null };
     } else {
-      // Если структура ответа неожиданная, но нет явной ошибки
-      return { valid: false, error: 'Неожиданный ответ от Ozon API при проверке Seller API' };
+      return { valid: false, error: 'Неожиданный ответ от Ozon API (v1/product/list) при проверке Seller API' };
     }
   } catch (error) {
     if (error instanceof AxiosError) {
       let errorMessage = 'Ошибка проверки учетных данных Seller API';
       if (error.response?.status === 403) {
         errorMessage = 'Неверные учетные данные Seller API (403)';
+      } else if (error.response?.status === 404) {
+        errorMessage = 'Эндпоинт проверки Seller API не найден (404)';
       }
       if (error.response?.data) {
-        const ozonError = error.response.data as any; // Приводим к any для доступа к разным полям ошибки Ozon
+        const ozonError = error.response.data as any;
         let details = '';
         if (typeof ozonError === 'string') {
           details = ozonError;
         } else if (ozonError.message) {
           details = ozonError.message;
-        } else if (ozonError.error && ozonError.error.message) { // Некоторые API Ozon так возвращают ошибку
+        } else if (ozonError.error && ozonError.error.message) {
           details = ozonError.error.message;
           if (ozonError.error.data) {
              details += ` (${JSON.stringify(ozonError.error.data)})`;
@@ -106,11 +107,10 @@ export const validatePerformanceCredentials = async (credentials: PerformanceCre
         },
       }
     );
-    // Performance API обычно возвращает данные напрямую или в объекте result
      if (response.data && (response.data.result !== undefined || Array.isArray(response.data.rows) || response.data.total !== undefined)) {
         return { valid: true, error: null };
-    } else if (response.status === 200 && !response.data) { // Иногда приходит 200 OK с пустым телом
-        return { valid: true, error: null }; // Считаем валидным, если нет явной ошибки
+    } else if (response.status === 200 && !response.data) {
+        return { valid: true, error: null };
     } else {
         return { valid: false, error: 'Неожиданный ответ от Ozon Performance API' };
     }
@@ -119,6 +119,8 @@ export const validatePerformanceCredentials = async (credentials: PerformanceCre
       let errorMessage = 'Ошибка проверки учетных данных Performance API';
       if (error.response?.status === 403) {
         errorMessage = 'Неверные учетные данные Performance API (403)';
+      } else if (error.response?.status === 404) {
+        errorMessage = 'Эндпоинт проверки Performance API не найден (404)';
       }
       if (error.response?.data) {
         const ozonError = error.response.data as any;
@@ -132,7 +134,7 @@ export const validatePerformanceCredentials = async (credentials: PerformanceCre
            if (ozonError.error.data) {
              details += ` (${JSON.stringify(ozonError.error.data)})`;
           }
-        } else if (ozonError.code && ozonError.message) { // Другой формат ошибки Ozon
+        } else if (ozonError.code && ozonError.message) { 
             details = `Code: ${ozonError.code}, Message: ${ozonError.message}`;
         }
         else {
@@ -153,6 +155,8 @@ export const validatePerformanceCredentials = async (credentials: PerformanceCre
     };
   }
 };
+
+// ... (остальная часть файла без изменений) ...
 
 export const getCampaignsList = async (credentials: OzonCredentials) => {
   try {
@@ -475,7 +479,7 @@ export const getProductList = async (
 ) => {
   try {
     const response = await axios.post(
-      'https://api-seller.ozon.ru/v1/product/list', // Обрати внимание, эта функция использует /v1/product/list, а валидация /v2/product/list
+      'https://api-seller.ozon.ru/v1/product/list',
       {
         filter,
         limit,
