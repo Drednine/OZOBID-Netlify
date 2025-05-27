@@ -34,8 +34,8 @@ export interface ProductFilter {
 export const validateCredentials = async (credentials: OzonCredentials) => {
   try {
     const response = await axios.post(
-      'https://api-seller.ozon.ru/v1/marketing/campaign/list',
-      {},
+      'https://api-seller.ozon.ru/v2/product/list',
+      { page: 1, page_size: 1 },
       {
         headers: {
           'Client-Id': credentials.clientId,
@@ -50,13 +50,13 @@ export const validateCredentials = async (credentials: OzonCredentials) => {
     if (error instanceof AxiosError) {
       return { 
         valid: false, 
-        error: error.response?.status === 403 ? 'Неверные учетные данные API' : 
-               error.response?.data?.message || 'Ошибка проверки учетных данных'
+        error: error.response?.status === 403 ? 'Неверные учетные данные Seller API' : 
+               error.response?.data?.message || 'Ошибка проверки учетных данных Seller API'
       };
     }
     return {
       valid: false,
-      error: 'Неизвестная ошибка при проверке учетных данных'
+      error: 'Неизвестная ошибка при проверке учетных данных Seller API'
     };
   }
 };
