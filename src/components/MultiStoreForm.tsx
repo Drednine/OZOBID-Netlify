@@ -3,11 +3,12 @@
 import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { supabase } from '@/lib/supabase';
-import { validateCredentials, validatePerformanceCredentials } from '@/lib/ozonApi';
+// Удаляем прямые импорты функций валидации, так как они теперь на бэкенде
+// import { validateCredentials, validatePerformanceCredentials } from '@/lib/ozonApi';
 
 interface MultiStoreFormProps {
   userId: string;
-  onSuccess?: (clientId: string, apiKey: string) => void;
+  onSuccess?: (clientId: string, apiKey: string) => void; // Уточнить, какие данные нужны onSuccess
 }
 
 interface FormValues {
@@ -15,55 +16,26 @@ interface FormValues {
   sellerClientId: string;
   sellerApiKey: string;
   performanceClientId: string;
-  performanceClientSecret: string;
+  performanceClientSecret: string; // В Ozon Performance API это обычно называется Api-Key, а не Client Secret
 }
 
 const MultiStoreForm: React.FC<MultiStoreFormProps> = ({ userId, onSuccess }) => {
   const [loading, setLoading] = useState(false);
-  const [validating, setValidating] = useState(false);
+  // Удаляем validating, так как isLoading будет покрывать и валидацию через API
+  // const [validating, setValidating] = useState(false); 
   const [message, setMessage] = useState('');
   const [success, setSuccess] = useState(false);
 
   const { register, handleSubmit, formState: { errors } } = useForm<FormValues>();
 
+  // Удаляем функцию validateApiKeys, так как валидация теперь на бэкенде
+  /*
   const validateApiKeys = async (data: FormValues) => {
     setValidating(true);
     setMessage('Проверка ключей API...');
-
-    try {
-      // Проверка Seller API ключей
-      const sellerCredentials = {
-        clientId: data.sellerClientId,
-        apiKey: data.sellerApiKey
-      };
-      
-      const { valid: sellerValid, error: sellerError } = await validateCredentials(sellerCredentials);
-      
-      if (sellerValid === false) {
-        throw new Error(sellerError || 'Ошибка валидации Seller API ключей');
-      }
-      
-      // Проверка Performance API ключей
-      const performanceCredentials = {
-        clientId: data.performanceClientId,
-        apiKey: data.performanceClientSecret
-      };
-      
-      const { valid: performanceValid, error: performanceError } = await validatePerformanceCredentials(performanceCredentials);
-      
-      if (performanceValid === false) {
-        throw new Error(performanceError || 'Ошибка валидации Performance API ключей');
-      }
-      
-      setMessage('Ключи API успешно проверены');
-      return true;
-    } catch (error) {
-      setMessage('Ошибка валидации: ' + (error as Error).message);
-      return false;
-    } finally {
-      setValidating(false);
-    }
+    // ... остальная часть удаленной функции
   };
+  */
 
   const onSubmit = async (data: FormValues) => {
     setLoading(true);
@@ -71,38 +43,67 @@ const MultiStoreForm: React.FC<MultiStoreFormProps> = ({ userId, onSuccess }) =>
     setSuccess(false);
 
     try {
-      // Валидация ключей API
-      const isValid = await validateApiKeys(data);
-      
-      if (isValid === false) {
-        return;
-      }
+      // Шаг 1: Вызов API-роута для валидации ключей
+      const validationResponse = await fetch('/api/validate-ozon-keys', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          storeName: data.storeName,
+          sellerApi: {
+            clientId: data.sellerClientId,
+            apiKey: data.sellerApiKey,
+          },
+          performanceApi: {
+            clientId: data.performanceClientId,
+            apiKey: data.performanceClientSecret, // Убедитесь, что это правильное поле
+          },
+        }),
+      });
 
-      // Сохранение данных магазина в Supabase
-      const { error } = await supabase
-        .from('stores')
+      const validationResult = await validationResponse.json();
+
+      if (!validationResponse.ok) {
+        // Ошибка от API-роута (валидация не прошла или другая ошибка на сервере)
+        throw new Error(validationResult.error || `Ошибка сервера: ${validationResponse.status}`);
+      }
+      
+      // Если валидация через API прошла успешно (validationResult.message будет содержать сообщение успеха)
+      // setMessage(validationResult.message); // Можно показать сообщение от API, или кастомное
+
+      // Шаг 2: Сохранение данных магазина в Supabase (только если валидация успешна)
+      const { error: dbError } = await supabase
+        .from('stores') // Убедитесь, что таблица называется 'stores'
         .insert([
           {
             user_id: userId,
             name: data.storeName,
-            client_id: data.sellerClientId,
-            api_key: data.sellerApiKey,
+            client_id: data.sellerClientId, // Seller Client ID
+            api_key: data.sellerApiKey,     // Seller API Key (нужно шифровать!)
             performance_client_id: data.performanceClientId,
-            performance_client_secret: data.performanceClientSecret,
-            created_at: new Date().toISOString()
-          }
+            performance_api_key: data.performanceClientSecret, // Performance API Key (тоже шифровать!)
+            // created_at: new Date().toISOString() // Supabase может делать это автоматически
+          },
         ]);
 
-      if (error) throw new Error(error.message);
+      if (dbError) {
+        // Если ошибка при сохранении в базу, но валидация ключей была успешной
+        throw new Error(`Ключи валидны, но произошла ошибка при сохранении магазина: ${dbError.message}`);
+      }
 
       setSuccess(true);
-      setMessage('Магазин успешно добавлен!');
+      setMessage('Магазин успешно добавлен и ключи проверены!'); // Обновленное сообщение
 
       if (onSuccess) {
+        // Передаем нужные данные в onSuccess, если это все еще требуется
+        // Например, если onSuccess ожидает Seller API ключи:
         onSuccess(data.sellerClientId, data.sellerApiKey);
       }
+
     } catch (error) {
-      setMessage('Ошибка при добавлении магазина: ' + (error as Error).message);
+      setMessage('Ошибка: ' + (error as Error).message);
+      setSuccess(false); // Убедимся, что success сброшен при ошибке
     } finally {
       setLoading(false);
     }
@@ -202,15 +203,13 @@ const MultiStoreForm: React.FC<MultiStoreFormProps> = ({ userId, onSuccess }) =>
           </div>
         </div>
 
-        <div className='flex items-center justify-between'>
-          <button
-            type='submit'
-            className='w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-md transition duration-200'
-            disabled={loading || validating}
-          >
-            {loading ? 'Добавление...' : validating ? 'Проверка ключей...' : 'Добавить магазин'}
-          </button>
-        </div>
+        <button
+          type='submit'
+          className='w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50'
+          disabled={loading}
+        >
+          {loading ? 'Добавление...' : 'Добавить магазин'}
+        </button>
       </form>
     </div>
   );
