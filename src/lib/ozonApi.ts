@@ -35,7 +35,7 @@ export const validateCredentials = async (credentials: OzonCredentials) => {
   try {
     const response = await axios.post(
       'https://api-seller.ozon.ru/v2/product/list',
-      { page: 1, page_size: 1 },
+      { filter: { visibility: "ALL" }, limit: 1 },
       {
         headers: {
           'Client-Id': credentials.clientId,
@@ -48,10 +48,18 @@ export const validateCredentials = async (credentials: OzonCredentials) => {
     return { valid: true, error: null };
   } catch (error) {
     if (error instanceof AxiosError) {
+      let errorMessage = 'Ошибка проверки учетных данных Seller API';
+      if (error.response?.status === 403) {
+        errorMessage = 'Неверные учетные данные Seller API';
+      }
+      if (error.response?.data) {
+        // Попытаемся добавить больше деталей из ответа Ozon
+        const ozonErrorMessage = typeof error.response.data === 'string' ? error.response.data : JSON.stringify(error.response.data);
+        errorMessage += `: ${ozonErrorMessage}`;
+      }
       return { 
         valid: false, 
-        error: error.response?.status === 403 ? 'Неверные учетные данные Seller API' : 
-               error.response?.data?.message || 'Ошибка проверки учетных данных Seller API'
+        error: errorMessage
       };
     }
     return {
