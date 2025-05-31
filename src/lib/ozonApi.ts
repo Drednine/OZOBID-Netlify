@@ -108,16 +108,11 @@ export const validatePerformanceCredentials = async (credentials: PerformanceCre
   // Не логируем credentials.apiKey напрямую
 
   try {
-    const dateNow = new Date();
-    const dateSevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    // Используем фиксированные даты для валидации, чтобы обойти проблему с системным временем на сервере Netlify
+    const dateFrom = "2024-05-01";
+    const dateTo = "2024-05-01";
 
-    console.log('validatePerformanceCredentials: Raw dateNow.toISOString():', dateNow.toISOString());
-    console.log('validatePerformanceCredentials: Raw dateSevenDaysAgo.toISOString():', dateSevenDaysAgo.toISOString());
-
-    const dateTo = dateNow.toISOString().split('T')[0];
-    const dateFrom = dateSevenDaysAgo.toISOString().split('T')[0];
-
-    console.log('validatePerformanceCredentials: Formatted dateFrom:', dateFrom, 'dateTo:', dateTo);
+    console.log('validatePerformanceCredentials: Using FIXED dateFrom:', dateFrom, 'dateTo:', dateTo, 'for validation.');
 
     const requestBody = {
       "dateFrom": dateFrom,
