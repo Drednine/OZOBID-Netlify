@@ -108,18 +108,18 @@ export const validatePerformanceCredentials = async (credentials: PerformanceCre
   // Не логируем credentials.apiKey напрямую
 
   try {
-    // Используем фиксированные даты для валидации, чтобы обойти проблему с системным временем на сервере Netlify
     const dateFrom = "2024-05-01";
     const dateTo = "2024-05-01";
 
     console.log('validatePerformanceCredentials: Using FIXED dateFrom:', dateFrom, 'dateTo:', dateTo, 'for validation.');
 
+    // Упрощаем тело запроса, убираем groupBy
     const requestBody = {
       "dateFrom": dateFrom,
       "dateTo": dateTo,
-      "groupBy": ["DATE"] // Минимальная группировка для запроса
+      // "groupBy": ["DATE"] // Убрали для максимального упрощения запроса
     };
-    console.log('validatePerformanceCredentials: Request body:', requestBody);
+    console.log('validatePerformanceCredentials: Request body (simplified):', requestBody);
 
     const response = await axios.post(
       'https://performance.ozon.ru/api/client/statistics',
