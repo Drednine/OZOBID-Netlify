@@ -106,10 +106,22 @@ export const validateCredentials = async (credentials: OzonCredentials) => {
 export const validatePerformanceCredentials = async (credentials: PerformanceCredentials) => {
   console.log('validatePerformanceCredentials: Validating Performance API credentials (clientId):', credentials.clientId);
   // Не логируем credentials.apiKey напрямую
+
   try {
+    const dateNow = new Date();
+    const dateSevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+    console.log('validatePerformanceCredentials: Raw dateNow.toISOString():', dateNow.toISOString());
+    console.log('validatePerformanceCredentials: Raw dateSevenDaysAgo.toISOString():', dateSevenDaysAgo.toISOString());
+
+    const dateTo = dateNow.toISOString().split('T')[0];
+    const dateFrom = dateSevenDaysAgo.toISOString().split('T')[0];
+
+    console.log('validatePerformanceCredentials: Formatted dateFrom:', dateFrom, 'dateTo:', dateTo);
+
     const requestBody = {
-      "dateFrom": new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      "dateTo": new Date().toISOString().split('T')[0],
+      "dateFrom": dateFrom,
+      "dateTo": dateTo,
       "groupBy": ["DATE"] // Минимальная группировка для запроса
     };
     console.log('validatePerformanceCredentials: Request body:', requestBody);
@@ -123,7 +135,7 @@ export const validatePerformanceCredentials = async (credentials: PerformanceCre
           'Api-Key': credentials.apiKey,
           'Content-Type': 'application/json',
         },
-        timeout: 10000 // Добавляем таймаут 10 секунд
+        timeout: 20000 // Увеличиваем таймаут до 20 секунд
       }
     );
     console.log('validatePerformanceCredentials: Response status:', response.status);
@@ -152,7 +164,10 @@ export const validatePerformanceCredentials = async (credentials: PerformanceCre
         console.error('validatePerformanceCredentials: AxiosError response data:', error.response.data);
       }
 
-      if (error.isAxiosError && !error.response) {
+      if (error.code === 'ECONNABORTED' || error.message.toLowerCase().includes('timeout')) {
+        errorMessage = `Сетевая ошибка: Таймаут (${error.config?.timeout}ms) при обращении к Performance API. Сервер Ozon не ответил вовремя.`;
+        console.error('validatePerformanceCredentials: AxiosError - Timeout occurred');
+      } else if (error.isAxiosError && !error.response) {
         errorMessage = `Сетевая ошибка при обращении к Performance API: ${error.message}`;
         if (error.code) {
             errorMessage += ` (Code: ${error.code})`;
