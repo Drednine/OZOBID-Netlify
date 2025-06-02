@@ -71,37 +71,63 @@ const MultiStoreForm: React.FC<MultiStoreFormProps> = ({ userId, onSuccess }) =>
       
       // Если валидация через API прошла успешно (validationResult.message будет содержать сообщение успеха)
       // setMessage(validationResult.message); // Можно показать сообщение от API, или кастомное
+      setMessage('Ключи API успешно проверены. Сохранение данных магазина...');
 
-      // Шаг 2: Сохранение данных магазина в Supabase (только если валидация успешна)
-      console.log('Attempting to save to Supabase with data:', {
+      // Шаг 2.1: Сохранение данных Seller API в ozon_seller_credentials
+      console.log('Attempting to save Seller credentials to Supabase with data:', {
         user_id: userId,
         name: data.storeName,
         client_id: data.sellerClientId,
         // Omitting api_key from log for security
-        performance_client_id: data.performanceClientId,
-        // Omitting performance_api_key from log for security
       });
 
-      const { error: dbError } = await supabase
-        .from('ozon_credentials') // Исправлено имя таблицы на ozon_credentials
+      const { error: sellerDbError } = await supabase
+        .from('ozon_seller_credentials') 
         .insert([
           {
             user_id: userId,
             name: data.storeName,
             client_id: data.sellerClientId, 
             api_key: data.sellerApiKey,     
-            performance_client_id: data.performanceClientId,
-            performance_api_key: data.performanceClientSecret, 
-            // created_at: new Date().toISOString() // Supabase делает это автоматически, если столбец настроен с default now()
           },
         ]);
 
-      if (dbError) {
-        console.error('Supabase DB Error object:', dbError); // Логируем полный объект ошибки Supabase
-        // Улучшаем сообщение об ошибке
-        const errorMessage = dbError.message || 'Неизвестная ошибка базы данных';
-        throw new Error(`Ключи валидны, но произошла ошибка при сохранении магазина: ${errorMessage} (Код: ${dbError.code || 'N/A'}, Детали: ${dbError.details || 'N/A'})`);
+      if (sellerDbError) {
+        console.error('Supabase Seller DB Error object:', sellerDbError);
+        const errorMessage = sellerDbError.message || 'Неизвестная ошибка базы данных при сохранении Seller API ключей';
+        throw new Error(`Ошибка сохранения Seller API: ${errorMessage} (Код: ${sellerDbError.code || 'N/A'}, Детали: ${sellerDbError.details || 'N/A'})`);
       }
+      console.log('Seller credentials saved successfully.');
+
+      // Шаг 2.2: Сохранение данных Performance API в ozon_performance_credentials
+      console.log('Attempting to save Performance credentials to Supabase with data:', {
+        user_id: userId,
+        name: data.storeName,
+        ozon_client_id: data.performanceClientId,
+        // Omitting ozon_client_secret from log for security
+      });
+
+      const { error: performanceDbError } = await supabase
+        .from('ozon_performance_credentials') 
+        .insert([
+          {
+            user_id: userId,
+            name: data.storeName, // Добавляем имя магазина для консистентности
+            ozon_client_id: data.performanceClientId,
+            ozon_client_secret: data.performanceClientSecret, // Это поле формы содержит Performance API Key
+            // access_token, token_expires_at, ozon_advertiser_id - пока не заполняем
+          },
+        ]);
+      
+      if (performanceDbError) {
+        console.error('Supabase Performance DB Error object:', performanceDbError);
+        // Важно: если ключи Seller сохранились, а Performance нет, нужно либо откатывать транзакцию (сложно без бэкенда),
+        // либо четко сообщить пользователю, что сохранилось частично.
+        // Пока просто выбрасываем ошибку.
+        const errorMessage = performanceDbError.message || 'Неизвестная ошибка базы данных при сохранении Performance API ключей';
+        throw new Error(`Ошибка сохранения Performance API: ${errorMessage} (Код: ${performanceDbError.code || 'N/A'}, Детали: ${performanceDbError.details || 'N/A'})`);
+      }
+      console.log('Performance credentials saved successfully.');
 
       setSuccess(true);
       setMessage('Магазин успешно добавлен и ключи проверены!'); // Обновленное сообщение
