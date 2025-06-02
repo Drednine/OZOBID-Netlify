@@ -73,23 +73,34 @@ const MultiStoreForm: React.FC<MultiStoreFormProps> = ({ userId, onSuccess }) =>
       // setMessage(validationResult.message); // Можно показать сообщение от API, или кастомное
 
       // Шаг 2: Сохранение данных магазина в Supabase (только если валидация успешна)
+      console.log('Attempting to save to Supabase with data:', {
+        user_id: userId,
+        name: data.storeName,
+        client_id: data.sellerClientId,
+        // Omitting api_key from log for security
+        performance_client_id: data.performanceClientId,
+        // Omitting performance_api_key from log for security
+      });
+
       const { error: dbError } = await supabase
-        .from('stores') // Убедитесь, что таблица называется 'stores'
+        .from('ozon_credentials') // Исправлено имя таблицы на ozon_credentials
         .insert([
           {
             user_id: userId,
             name: data.storeName,
-            client_id: data.sellerClientId, // Seller Client ID
-            api_key: data.sellerApiKey,     // Seller API Key (нужно шифровать!)
+            client_id: data.sellerClientId, 
+            api_key: data.sellerApiKey,     
             performance_client_id: data.performanceClientId,
-            performance_api_key: data.performanceClientSecret, // Performance API Key (тоже шифровать!)
-            // created_at: new Date().toISOString() // Supabase может делать это автоматически
+            performance_api_key: data.performanceClientSecret, 
+            // created_at: new Date().toISOString() // Supabase делает это автоматически, если столбец настроен с default now()
           },
         ]);
 
       if (dbError) {
-        // Если ошибка при сохранении в базу, но валидация ключей была успешной
-        throw new Error(`Ключи валидны, но произошла ошибка при сохранении магазина: ${dbError.message}`);
+        console.error('Supabase DB Error object:', dbError); // Логируем полный объект ошибки Supabase
+        // Улучшаем сообщение об ошибке
+        const errorMessage = dbError.message || 'Неизвестная ошибка базы данных';
+        throw new Error(`Ключи валидны, но произошла ошибка при сохранении магазина: ${errorMessage} (Код: ${dbError.code || 'N/A'}, Детали: ${dbError.details || 'N/A'})`);
       }
 
       setSuccess(true);
@@ -102,8 +113,17 @@ const MultiStoreForm: React.FC<MultiStoreFormProps> = ({ userId, onSuccess }) =>
       }
 
     } catch (error) {
-      setMessage('Ошибка: ' + (error as Error).message);
-      setSuccess(false); // Убедимся, что success сброшен при ошибке
+      // Улучшенная обработка отображения сообщения об ошибке
+      let displayMessage = 'Произошла неизвестная ошибка.';
+      if (error instanceof Error && error.message) {
+        displayMessage = error.message;
+      } else if (typeof error === 'string') {
+        displayMessage = error;
+      }
+      // Логируем оригинальную ошибку для отладки
+      console.error('Caught error in onSubmit:', error);
+      setMessage('Ошибка: ' + displayMessage);
+      setSuccess(false); 
     } finally {
       setLoading(false);
     }
