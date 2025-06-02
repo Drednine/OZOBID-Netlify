@@ -18,6 +18,7 @@ interface OzonProductInfo {
   id: number;
   name: string;
   offer_id: string;
+  sku?: number;
   barcode: string;
   category_id: number;
   description: string;
@@ -237,6 +238,33 @@ export async function POST(request: NextRequest) {
       const stockInfo = productStockData.find((p) => p.product_id === listItem.product_id);
       const picturesInfo = productPicturesData.find((p) => p.product_id === listItem.product_id);
 
+      // Determine the correct product ID for URLs (prefer info.sku if available)
+      let idForUrl = listItem.product_id; // Default to product_id from product/list
+      let idSourceForUrl = "listItem.product_id";
+
+      if (info && typeof info.sku === 'number' && info.sku > 0) {
+        idForUrl = info.sku;
+        idSourceForUrl = "info.sku";
+      }
+
+      // !!!!! DEBUG LOGGING START for specific offer_id !!!!!
+      if (listItem.offer_id === "01-ВИБ-СВ-КРОЛ-МАЛИН-ОЗОН") {
+        console.log("OZOBID_DEBUG: Product ID decision for offer_id 01-ВИБ-СВ-КРОЛ-МАЛИН-ОЗОН", {
+          listItem_product_id: listItem.product_id,
+          listItem_offer_id: listItem.offer_id,
+          info_present: !!info,
+          info_id: info?.id,
+          info_offer_id: info?.offer_id,
+          info_sku: info?.sku,
+          chosen_id_for_url: idForUrl,
+          id_source_for_url: idSourceForUrl
+        });
+        if (info && (typeof info.sku !== 'number' || info.sku <= 0)){
+          console.warn(`OZOBID_WARN: For 01-ВИБ-СВ-КРОЛ-МАЛИН-ОЗОН, info.sku is missing or invalid (value: ${info.sku}). Falling back to listItem.product_id for URL.`);
+        }
+      }
+      // !!!!! DEBUG LOGGING END !!!!!
+
       const name = info?.name || "Без названия";
       if (!info?.name) {
         console.warn(`Product ID ${listItem.product_id} (Offer ID: ${listItem.offer_id}) has no name. Info:`, info);
@@ -278,7 +306,7 @@ export async function POST(request: NextRequest) {
       }
 
       return {
-        product_id: listItem.product_id,
+        product_id: idForUrl,
         offer_id: listItem.offer_id,
         name: name,
         images: images,
