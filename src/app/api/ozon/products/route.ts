@@ -129,6 +129,9 @@ async function batchRequest<T, R>(
         results.push(...data.result.items);
       } else if (data.result && !Array.isArray(data.result.items) && Array.isArray(data.result)) {
         results.push(...(data.result.items || data.result));
+      } else if (Array.isArray(data.items)) {
+        console.log(`batchRequest: Detected data.items structure for ${url}`);
+        results.push(...data.items);
       } else {
         console.warn(`Unexpected data structure from ${url} for batch:`, data);
       }
@@ -193,21 +196,28 @@ export async function POST(request: NextRequest) {
 
     const productPriceData = await batchRequest<number, OzonProductPriceInfo>(
       productIds,
-      "https://api-seller.ozon.ru/v4/product/info/prices",
+      "https://api-seller.ozon.ru/v5/product/info/prices",
       "POST",
       headers,
-      (batch) => ({ product_id: batch, filter: { visibility: "ALL"} }),
+      (batch) => ({
+         filter: { product_id: batch.map(String), visibility: "ALL" }, 
+         limit: batch.length 
+        }), 
       1000
     );
     console.log("Raw productPriceData from Ozon:", JSON.stringify(productPriceData, null, 2));
 
+    console.log("Fetching product stocks for IDs:", productIds);
     const productStockData = await batchRequest<number, OzonProductStockInfo>(
       productIds,
-      "https://api-seller.ozon.ru/v2/product/info/stocks",
+      "https://api-seller.ozon.ru/v4/product/info/stocks",
       "POST",
       headers,
-      (batch) => ({ product_id: batch }),
-      500
+      (batch) => ({
+        filter: { product_id: batch.map(String), visibility: "ALL" },
+        limit: batch.length
+      }),
+      1000
     );
     console.log("Raw productStockData from Ozon:", JSON.stringify(productStockData, null, 2));
 
