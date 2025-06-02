@@ -6,197 +6,289 @@ interface OzonProductListItem {
   offer_id: string;
 }
 
-interface OzonProductInfoItem {
-  id: number; // Совпадает с product_id
+interface OzonProductListResponse {
+  result: {
+    items: OzonProductListItem[];
+    last_id: string;
+    total: number;
+  };
+}
+
+interface OzonProductInfo {
+  id: number;
   name: string;
   offer_id: string;
   barcode: string;
   category_id: number;
-  images: { file_name: string; default: boolean }[];
   description: string;
-  // ... другие поля из /v3/product/info/list
+  primary_image?: string;
+  images_360?: string[];
+  color_image?: string;
+  [key: string]: any;
 }
 
-interface OzonProductPriceItem {
+interface OzonProductInfoListResponse {
+  result: {
+    items: OzonProductInfo[];
+  };
+}
+
+interface OzonProductPriceInfo {
   product_id: number;
   offer_id: string;
   price: {
-    price: string; // Цена в рублях, например "123.45"
+    price: string;
     old_price: string;
-    vat: string;
-    // ...
+    [key: string]: any;
   };
-  // ...
+  [key: string]: any;
 }
 
-interface OzonProductStockItem {
+interface OzonProductPricesResponse {
+  result: {
+    items: OzonProductPriceInfo[];
+  };
+}
+
+interface OzonProductStockInfo {
   product_id: number;
   offer_id: string;
   stocks: {
-    type: 'fbs' | 'fbo' | 'crossborder';
-    present: number; // Остаток
+    present: number;
     reserved: number;
+    type: "fbo" | "fbs" | "crossborder";
+    [key: string]: any;
   }[];
 }
 
-// Интерфейс для агрегированного товара, который будет возвращен клиенту
-interface AggregatedProduct {
-  id: number;
-  name: string;
-  sku: string; // offer_id
-  category: string; // Пока оставим как строку, позже можно добавить резолв имени категории
-  price: number;
-  oldPrice: number;
-  stock: number;
-  status?: string; // Можно будет добавить из product/list или product/info
-  images: string[]; // URL основных изображений
-  url: string;
-  description?: string;
-  barcode?: string;
+interface OzonProductStocksResponse {
+  result: {
+    items: OzonProductStockInfo[];
+  };
 }
 
-const OZON_API_TIMEOUT = 25000; // Увеличенный таймаут для Ozon API запросов
-const MAX_IDS_PER_REQUEST = 500; // Максимальное количество ID для пакетных запросов Ozon (уточнить по документации)
+interface OzonProductPicturesInfoItem {
+  product_id: number;
+  primary_photo: string[];
+  photo: string[];
+  color_photo: string[];
+  photo_360: string[];
+  errors: any[];
+}
 
-async function batchRequest(url: string, ids: (number | string)[], fieldName: string, clientId: string, apiKey: string) {
-  const results: any[] = [];
-  for (let i = 0; i < ids.length; i += MAX_IDS_PER_REQUEST) {
-    const batch = ids.slice(i, i + MAX_IDS_PER_REQUEST);
+interface OzonProductPicturesInfoResponse {
+  result: {
+    items: OzonProductPicturesInfoItem[];
+  };
+}
+
+export interface AggregatedProduct {
+  product_id: number;
+  offer_id: string;
+  name: string;
+  images: string[];
+  price: number;
+  old_price: number;
+  totalStock: number;
+  category_id: number;
+  barcode: string;
+  description: string;
+  stocks_by_type?: { fbo: number; fbs: number; crossborder: number };
+}
+
+const OZON_API_TIMEOUT = 25000;
+const MAX_IDS_PER_REQUEST = 500;
+
+async function batchRequest<T, R>(
+  items: T[],
+  url: string,
+  method: string,
+  headers: Record<string, string>,
+  bodyGenerator: (batch: T[]) => Record<string, any>,
+  batchSize: number
+): Promise<R[]> {
+  const results: R[] = [];
+  for (let i = 0; i < items.length; i += batchSize) {
+    const batch = items.slice(i, i + batchSize);
     try {
-      const response = await axios.post(
-        url,
-        { [fieldName]: batch },
-        {
-          headers: { 'Client-Id': clientId, 'Api-Key': apiKey, 'Content-Type': 'application/json' },
-          timeout: OZON_API_TIMEOUT,
-        }
-      );
-      if (response.data && response.data.result) {
-        // Для /v3/product/info/list ответ response.data.result.items
-        // Для /v4/product/info/prices ответ response.data.result (массив)
-        // Для /v2/product/info/stocks ответ response.data.result.items
-        if (response.data.result.items) {
-          results.push(...response.data.result.items);
-        } else if (Array.isArray(response.data.result)) { // Специально для /v4/product/info/prices
-          results.push(...response.data.result);
-        } else {
-           console.warn(`Batch request to ${url} for field ${fieldName} returned unexpected result structure:`, response.data.result);
-        }
+      const response = await fetch(url, {
+        method,
+        headers,
+        body: JSON.stringify(bodyGenerator(batch)),
+      });
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(
+          `Error in batchRequest to ${url} (batch starting with ${JSON.stringify(batch[0])}): ${response.status} ${response.statusText}`,
+          errorText
+        );
+        continue;
+      }
+      const data = await response.json();
+      if (data.result && Array.isArray(data.result.items)) {
+        results.push(...data.result.items);
+      } else if (data.result && !Array.isArray(data.result.items) && Array.isArray(data.result)) {
+        results.push(...(data.result.items || data.result));
       } else {
-         console.warn(`Batch request to ${url} for field ${fieldName} returned no data or no result object:`, response.data);
+        console.warn(`Unexpected data structure from ${url} for batch:`, data);
       }
     } catch (error) {
-      const axiosError = error as AxiosError;
-      console.error(`Error in batchRequest to ${url} for IDs ${batch.slice(0,5)}...:`, axiosError.message);
-      if (axiosError.response) {
-        console.error(`Ozon API Error Response for ${url}:`, axiosError.response.data);
-      }
-      // Не прерываем весь процесс, а возвращаем пустой результат для этой пачки
+      console.error(`Network error or JSON parsing error in batchRequest to ${url}:`, error);
     }
   }
   return results;
 }
 
-
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { clientId, apiKey, storeName, pageSize = 50, lastId = "" } = body; // Увеличил pageSize по умолчанию
+    const { clientId, apiKey, pageSize = 100, lastId = "" } = await request.json();
 
     if (!clientId || !apiKey) {
-      return NextResponse.json({ error: 'Missing clientId or apiKey' }, { status: 400 });
+      return NextResponse.json({ error: "Client ID and API Key are required" }, { status: 400 });
     }
 
-    console.log(`API ozon/products (v2): Received request for store: ${storeName || 'N/A'}, clientId: ${clientId}, pageSize: ${pageSize}, lastId: ${lastId}`);
-
-    // 1. Получение списка товаров (product_id, offer_id)
-    const productListRequestBody: any = {
-      filter: { visibility: "ALL" },
-      limit: pageSize,
-      last_id: lastId,
+    const headers = {
+      "Client-Id": clientId,
+      "Api-Key": apiKey,
+      "Content-Type": "application/json",
     };
-    // Если lastId пустой (первая страница), его не нужно передавать в Ozon API по некоторым версиям документации
-    if (!lastId) {
-      delete productListRequestBody.last_id;
+
+    const productListResponse = await fetch("https://api-seller.ozon.ru/v3/product/list", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        filter: { visibility: "ALL" },
+        limit: pageSize,
+        last_id: lastId,
+      }),
+    });
+
+    if (!productListResponse.ok) {
+      const errorText = await productListResponse.text();
+      console.error("Error fetching product list:", errorText);
+      return NextResponse.json({ error: "Failed to fetch product list from Ozon", details: errorText }, { status: productListResponse.status });
     }
-    // Попробуем также не передавать filter, чтобы Ozon использовал свои значения по умолчанию.
-    // Если это не поможет, можно вернуть: filter: { visibility: "ALL" }
 
-    console.log('API ozon/products (v3): Requesting /v3/product/list with body:', productListRequestBody);
+    const productListData = (await productListResponse.json()) as OzonProductListResponse;
+    const productItems = productListData.result?.items || [];
+    const nextLastId = productListData.result?.last_id || "";
+    const totalItems = productListData.result?.total || 0;
 
-    const productListResponse = await axios.post(
-      'https://api-seller.ozon.ru/v3/product/list',
-      productListRequestBody,
-      {
-        headers: { 'Client-Id': clientId, 'Api-Key': apiKey, 'Content-Type': 'application/json' },
-        timeout: OZON_API_TIMEOUT,
-      }
+    if (productItems.length === 0) {
+      return NextResponse.json({ items: [], last_id: nextLastId, total_items: totalItems });
+    }
+
+    const productIds = productItems.map((item) => item.product_id);
+    const offerIds = productItems.map((item) => item.offer_id);
+
+    const productInfoData = await batchRequest<number, OzonProductInfo>(
+      productIds,
+      "https://api-seller.ozon.ru/v3/product/info/list",
+      "POST",
+      headers,
+      (batch) => ({ product_id: batch }),
+      500
     );
+    console.log("Raw productInfoData from Ozon:", JSON.stringify(productInfoData, null, 2));
 
-    if (!productListResponse.data || !productListResponse.data.result) {
-      console.error('API ozon/products (v2): Failed to fetch product list or unexpected structure', productListResponse.data);
-      return NextResponse.json({ error: 'Failed to fetch product list' }, { status: 500 });
-    }
+    const productPriceData = await batchRequest<number, OzonProductPriceInfo>(
+      productIds,
+      "https://api-seller.ozon.ru/v4/product/info/prices",
+      "POST",
+      headers,
+      (batch) => ({ product_id: batch, filter: { visibility: "ALL"} }),
+      1000
+    );
+    console.log("Raw productPriceData from Ozon:", JSON.stringify(productPriceData, null, 2));
 
-    const productListItems: OzonProductListItem[] = productListResponse.data.result.items || [];
-    const nextLastId: string = productListResponse.data.result.last_id || "";
-    const totalItemsInList: number = productListResponse.data.result.total || productListItems.length;
+    const productStockData = await batchRequest<number, OzonProductStockInfo>(
+      productIds,
+      "https://api-seller.ozon.ru/v2/product/info/stocks",
+      "POST",
+      headers,
+      (batch) => ({ product_id: batch }),
+      500
+    );
+    console.log("Raw productStockData from Ozon:", JSON.stringify(productStockData, null, 2));
 
-    console.log(`API ozon/products (v3): Fetched ${productListItems.length} product IDs. Next last_id: ${nextLastId}, Total in list (calculated): ${totalItemsInList}`);
+    const productPicturesData = await batchRequest<number, OzonProductPicturesInfoItem>(
+      productIds,
+      "https://api-seller.ozon.ru/v2/product/pictures/info",
+      "POST",
+      headers,
+      (batch) => ({ product_id: batch.map(String) }),
+      1000
+    );
+    console.log("Raw productPicturesData from Ozon:", JSON.stringify(productPicturesData, null, 2));
 
-    if (productListItems.length === 0) {
-      return NextResponse.json({ items: [], last_id: nextLastId, total_items: totalItemsInList });
-    }
+    const aggregatedProducts: AggregatedProduct[] = productItems.map((listItem) => {
+      const info = productInfoData.find((p) => p.id === listItem.product_id);
+      const priceInfo = productPriceData.find((p) => p.product_id === listItem.product_id);
+      const stockInfo = productStockData.find((p) => p.product_id === listItem.product_id);
+      const picturesInfo = productPicturesData.find((p) => p.product_id === listItem.product_id);
 
-    const productIds = productListItems.map(item => item.product_id);
-    const offerIds = productListItems.map(item => item.offer_id); // Может понадобиться
-
-    // 2. Получение детальной информации
-    // Важно: /v3/product/info/list и /v4/product/info/prices используют product_id
-    // /v2/product/info/stocks может использовать product_id ИЛИ offer_id ИЛИ sku (который равен offer_id)
-
-    const [productInfoData, productPriceData, productStockData] = await Promise.all([
-      batchRequest('https://api-seller.ozon.ru/v3/product/info/list', productIds, 'product_id', clientId, apiKey),
-      batchRequest('https://api-seller.ozon.ru/v4/product/info/prices', productIds, 'product_id', clientId, apiKey),
-      batchRequest('https://api-seller.ozon.ru/v2/product/info/stocks', productIds, 'product_id', clientId, apiKey)
-      // Альтернативно для stocks можно использовать offer_id, если с product_id будут проблемы:
-      // batchRequest('https://api-seller.ozon.ru/v2/product/info/stocks', offerIds, 'offer_id', clientId, apiKey)
-    ]);
-    
-    console.log(`API ozon/products (v2): Fetched details: info=${productInfoData.length}, price=${productPriceData.length}, stock=${productStockData.length}`);
-
-    // 3. Агрегация данных
-    const aggregatedProducts: AggregatedProduct[] = productListItems.map(listItem => {
-      const info: OzonProductInfoItem | undefined = productInfoData.find(p => p.id === listItem.product_id);
-      const priceInfo: OzonProductPriceItem | undefined = productPriceData.find(p => p.product_id === listItem.product_id);
-      const stockInfo: OzonProductStockItem | undefined = productStockData.find(p => p.product_id === listItem.product_id);
-
-      let totalStock = 0;
-      if (stockInfo && stockInfo.stocks) {
-        totalStock = stockInfo.stocks.reduce((sum, s) => sum + (s.present || 0), 0);
+      const name = info?.name || "Без названия";
+      if (!info?.name) {
+        console.warn(`Product ID ${listItem.product_id} (Offer ID: ${listItem.offer_id}) has no name. Info:`, info);
       }
       
-      const mainImage = info?.images?.find(img => img.default)?.file_name || info?.images?.[0]?.file_name || "";
+      const images: string[] = [];
+      if (picturesInfo) {
+        if (picturesInfo.primary_photo && picturesInfo.primary_photo.length > 0) {
+          images.push(...picturesInfo.primary_photo);
+        } else if (picturesInfo.photo && picturesInfo.photo.length > 0) {
+          images.push(...picturesInfo.photo);
+        }
+      }
+      if (images.length === 0) {
+        console.warn(`Product ID ${listItem.product_id} (Offer ID: ${listItem.offer_id}) has no images. PicturesInfo:`, picturesInfo);
+      }
+
+      const price = parseFloat(priceInfo?.price?.price || "0");
+      const old_price = parseFloat(priceInfo?.price?.old_price || "0");
+      if (!priceInfo?.price?.price) {
+        console.warn(`Product ID ${listItem.product_id} (Offer ID: ${listItem.offer_id}) has no price. PriceInfo:`, priceInfo);
+      }
+
+      let totalStock = 0;
+      const stocks_by_type: AggregatedProduct['stocks_by_type'] = { fbo: 0, fbs: 0, crossborder: 0 };
+      if (stockInfo && stockInfo.stocks) {
+        stockInfo.stocks.forEach(s => {
+          const currentStock = Number(s.present) || 0;
+          totalStock += currentStock;
+          if (s.type) {
+            stocks_by_type[s.type] = (stocks_by_type[s.type] || 0) + currentStock;
+          }
+        });
+      } else {
+        console.warn(`Product ID ${listItem.product_id} (Offer ID: ${listItem.offer_id}) has no stock info or empty stocks. StockInfo:`, stockInfo);
+      }
+      if (totalStock === 0 && stockInfo && stockInfo.stocks && stockInfo.stocks.length > 0) {
+        console.log(`Product ID ${listItem.product_id} (Offer ID: ${listItem.offer_id}) calculated totalStock is 0, but has stock entries. StockInfo:`, stockInfo);
+      }
 
       return {
-        id: listItem.product_id,
-        name: info?.name || 'Без названия',
-        sku: listItem.offer_id,
-        category: info?.category_id?.toString() || 'Без категории', // Пока ID категории
-        price: parseFloat(priceInfo?.price?.price || "0"),
-        oldPrice: parseFloat(priceInfo?.price?.old_price || "0"),
-        stock: totalStock,
-        images: mainImage ? [mainImage] : [], // Пока только одно основное изображение
-        url: `https://ozon.ru/product/${listItem.product_id}`,
-        description: info?.description,
-        barcode: info?.barcode,
-        // status: info.status?.state_name (нужно смотреть структуру статуса из /v3/product/info/list)
+        product_id: listItem.product_id,
+        offer_id: listItem.offer_id,
+        name: name,
+        images: images,
+        price: price,
+        old_price: old_price,
+        totalStock: totalStock,
+        category_id: info?.category_id || 0,
+        barcode: info?.barcode || "",
+        description: info?.description || "",
+        stocks_by_type: stocks_by_type,
       };
     });
 
-    console.log(`API ozon/products (v2): Successfully aggregated ${aggregatedProducts.length} products for clientId: ${clientId}`);
-    return NextResponse.json({ items: aggregatedProducts, last_id: nextLastId, total_items: totalItemsInList });
+    console.log("First aggregated product sample:", JSON.stringify(aggregatedProducts[0], null, 2));
 
+    return NextResponse.json({
+      items: aggregatedProducts,
+      last_id: nextLastId,
+      total_items: totalItems,
+    });
   } catch (error: any) {
     console.error('API ozon/products (v2): Unhandled error in POST handler:', error.message);
     if (error.response) {
