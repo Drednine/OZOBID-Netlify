@@ -69,7 +69,7 @@ const ProductExportForm: React.FC<ProductExportFormProps> = ({ userId, credentia
   const priceFilter = watch('priceFilter');
   const searchQuery = watch('searchQuery');
 
-  const fetchProducts = useCallback(async (lastIdToFetch: string) => {
+  const fetchProducts = useCallback(async (lastIdToFetch: string, currentSearchTerm?: string) => {
     if (!credentials || !credentials.sellerClientId || !credentials.sellerApiKey) {
       setProducts([]);
       setFilteredProducts([]);
@@ -88,6 +88,7 @@ const ProductExportForm: React.FC<ProductExportFormProps> = ({ userId, credentia
         storeName: credentials.storeName,
         pageSize: ITEMS_PER_PAGE,
         lastId: lastIdToFetch,
+        searchTerm: currentSearchTerm,
       });
 
       if (response.data && Array.isArray(response.data.items)) {
@@ -96,11 +97,11 @@ const ProductExportForm: React.FC<ProductExportFormProps> = ({ userId, credentia
         setTotalItems(response.data.total_items || 0);
         setCurrentLastId(response.data.last_id || "");
         
-        if (!lastIdToFetch) { 
+        if (!lastIdToFetch || currentSearchTerm) { 
             setPageHistory([""]); 
             setCurrentPageNumber(1);
         }
-        console.log('ProductExportForm: Products loaded:', response.data.items.length, 'Total:', response.data.total_items, 'NextLastId:', response.data.last_id);
+        console.log('ProductExportForm: Products loaded:', response.data.items.length, 'Total:', response.data.total_items, 'NextLastId:', response.data.last_id, 'SearchTerm:', currentSearchTerm);
       } else {
         throw new Error('Некорректный формат ответа от API товаров');
       }
@@ -118,8 +119,8 @@ const ProductExportForm: React.FC<ProductExportFormProps> = ({ userId, credentia
 
   useEffect(() => {
     if (credentials && credentials.sellerClientId && credentials.sellerApiKey) {
-      console.log('ProductExportForm: Credentials changed, fetching initial products...', credentials.storeName);
-      fetchProducts(""); 
+      console.log('ProductExportForm: Credentials changed or initial load, fetching initial products...', credentials.storeName);
+      fetchProducts("", searchQuery); 
     } else {
       setProducts([]);
       setFilteredProducts([]);
@@ -130,7 +131,7 @@ const ProductExportForm: React.FC<ProductExportFormProps> = ({ userId, credentia
       setProductError(null); 
       console.log('ProductExportForm: Credentials cleared or incomplete.');
     }
-  }, [credentials, fetchProducts]);
+  }, [credentials, fetchProducts, searchQuery]);
 
   useEffect(() => {
     if (products.length === 0 && !loadingProducts) { 
@@ -152,21 +153,13 @@ const ProductExportForm: React.FC<ProductExportFormProps> = ({ userId, credentia
       filtered = filtered.filter(product => product.price <= 0);
     }
         
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(product => 
-        product.name.toLowerCase().includes(query) || 
-        product.offer_id.toLowerCase().includes(query)
-      );
-    }
-    
     setFilteredProducts(filtered);
-  }, [exportType, priceFilter, searchQuery, products, loadingProducts]);
+  }, [exportType, priceFilter, products, loadingProducts]);
 
   const handleNextPage = () => {
     if (currentLastId) {
       setPageHistory(prev => [...prev, currentLastId]);
-      fetchProducts(currentLastId);
+      fetchProducts(currentLastId, searchQuery);
       setCurrentPageNumber(prev => prev + 1);
     }
   };
@@ -177,7 +170,7 @@ const ProductExportForm: React.FC<ProductExportFormProps> = ({ userId, credentia
       newHistory.pop(); 
       const prevLastId = newHistory[newHistory.length - 1]; 
       setPageHistory(newHistory);
-      fetchProducts(prevLastId);
+      fetchProducts(prevLastId, searchQuery);
       setCurrentPageNumber(prev => prev - 1);
     }
   };

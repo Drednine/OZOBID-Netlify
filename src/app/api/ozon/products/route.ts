@@ -19,12 +19,14 @@ interface OzonProductInfo {
   name: string;
   offer_id: string;
   sku?: number;
+  barcodes?: string[];
   barcode: string;
   category_id: number;
   description: string;
   primary_image?: string;
   images_360?: string[];
   color_image?: string;
+  sources?: Array<{ sku: number; [key: string]: any }>;
   [key: string]: any;
 }
 
@@ -145,7 +147,7 @@ async function batchRequest<T, R>(
 
 export async function POST(request: NextRequest) {
   try {
-    const { clientId, apiKey, pageSize = 100, lastId = "" } = await request.json();
+    const { clientId, apiKey, pageSize = 100, lastId = "", searchTerm = "" } = await request.json();
 
     if (!clientId || !apiKey) {
       return NextResponse.json({ error: "Client ID and API Key are required" }, { status: 400 });
@@ -157,13 +159,20 @@ export async function POST(request: NextRequest) {
       "Content-Type": "application/json",
     };
 
+    const productListFilter: any = { visibility: "ALL" };
+    if (searchTerm) {
+      productListFilter.search = searchTerm;
+    } else if (lastId) {
+      productListFilter.last_id = lastId;
+    }
+
     const productListResponse = await fetch("https://api-seller.ozon.ru/v3/product/list", {
       method: "POST",
       headers,
       body: JSON.stringify({
-        filter: { visibility: "ALL" },
+        filter: productListFilter,
         limit: pageSize,
-        last_id: lastId,
+        ...(searchTerm ? {} : { last_id: lastId }),
       }),
     });
 
@@ -233,39 +242,47 @@ export async function POST(request: NextRequest) {
     console.log("Raw productPicturesData from Ozon:", JSON.stringify(productPicturesData, null, 2));
 
     const aggregatedProducts: AggregatedProduct[] = productItems.map((listItem) => {
-      const info = productInfoData.find((p) => p.id === listItem.product_id);
-      const priceInfo = productPriceData.find((p) => p.product_id === listItem.product_id);
-      const stockInfo = productStockData.find((p) => p.product_id === listItem.product_id);
+      const info = productInfoData.find((p) => p.id === listItem.product_id || p.offer_id === listItem.offer_id);
+      const priceInfo = productPriceData.find((p) => p.product_id === listItem.product_id || p.offer_id === listItem.offer_id);
+      const stockInfo = productStockData.find((p) => p.product_id === listItem.product_id || p.offer_id === listItem.offer_id);
       const picturesInfo = productPicturesData.find((p) => p.product_id === listItem.product_id);
 
-      // Determine the correct product ID for URLs (prefer info.sku if available)
-      let idForUrl = listItem.product_id; // Default to product_id from product/list
-      let idSourceForUrl = "listItem.product_id";
+      let idForUrl = listItem.product_id;
+      let idSourceForUrl = "listItem.product_id (fallback)";
 
-      if (info && typeof info.sku === 'number' && info.sku > 0) {
-        idForUrl = info.sku;
-        idSourceForUrl = "info.sku";
-      }
-
-      // !!!!! DEBUG LOGGING START for specific offer_id !!!!!
-      if (listItem.offer_id === "01-ВИБ-СВ-КРОЛ-МАЛИН-ОЗОН") {
-        console.log("OZOBID_DEBUG: Product ID decision for offer_id 01-ВИБ-СВ-КРОЛ-МАЛИН-ОЗОН", {
-          listItem_product_id: listItem.product_id,
-          listItem_offer_id: listItem.offer_id,
-          info_present: !!info,
-          info_id: info?.id,
-          info_offer_id: info?.offer_id,
-          info_sku: info?.sku,
-          chosen_id_for_url: idForUrl,
-          id_source_for_url: idSourceForUrl
-        });
-        if (info && (typeof info.sku !== 'number' || info.sku <= 0)){
-          console.warn(`OZOBID_WARN: For 01-ВИБ-СВ-КРОЛ-МАЛИН-ОЗОН, info.sku is missing or invalid (value: ${info.sku}). Falling back to listItem.product_id for URL.`);
+      if (info) {
+        if (info.sources && Array.isArray(info.sources) && info.sources.length > 0 && typeof info.sources[0].sku === 'number' && info.sources[0].sku > 0) {
+          idForUrl = info.sources[0].sku;
+          idSourceForUrl = "info.sources[0].sku";
+        } else if (typeof info.sku === 'number' && info.sku > 0) {
+          idForUrl = info.sku;
+          idSourceForUrl = "info.sku (direct)";
         }
       }
-      // !!!!! DEBUG LOGGING END !!!!!
 
-      const name = info?.name || "Без названия";
+      if (typeof idForUrl !== 'number' || idForUrl <= 0) {
+        idForUrl = listItem.product_id;
+        idSourceForUrl += " -> listItem.product_id (final fallback)";
+      }
+
+      const finalProductId = idForUrl;
+
+      if (listItem.offer_id === "01-ВИБ-СВ-КРОЛ-МАЛИН-ОЗОН") {
+        console.log(`OZOBID_DEBUG: [${listItem.offer_id}] Mapping Details:`);
+        console.log(`  Initial listItem.product_id: ${listItem.product_id}`);
+        console.log(`  Info found: ${!!info}`);
+        if (info) {
+          console.log(`    info.id: ${info.id}`);
+          console.log(`    info.sku (direct): ${info.sku}`);
+          console.log(`    info.sources: ${JSON.stringify(info.sources)}`);
+          if (info.sources && info.sources.length > 0) {
+            console.log(`    info.sources[0].sku: ${info.sources[0]?.sku}`);
+          }
+        }
+        console.log(`  ID chosen for URL (finalProductId): ${finalProductId} (Source: ${idSourceForUrl})`);
+      }
+
+      const name = info?.name || "Имя не найдено";
       if (!info?.name) {
         console.warn(`Product ID ${listItem.product_id} (Offer ID: ${listItem.offer_id}) has no name. Info:`, info);
       }
@@ -306,7 +323,7 @@ export async function POST(request: NextRequest) {
       }
 
       return {
-        product_id: idForUrl,
+        product_id: finalProductId,
         offer_id: listItem.offer_id,
         name: name,
         images: images,
