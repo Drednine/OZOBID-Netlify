@@ -19,19 +19,20 @@ interface ProductExportFormProps {
 }
 
 // Интерфейс для товара, как он приходит от нашего API /api/ozon/products
+// Должен совпадать с AggregatedProduct из src/app/api/ozon/products/route.ts
 interface Product {
-  id: number;
+  product_id: number;
+  offer_id: string;
   name: string;
-  sku: string;
-  category: string; // ID категории
+  images: string[];
   price: number;
-  oldPrice: number;
-  stock: number;
-  status?: string;
-  images: string[]; 
-  url: string;
-  description?: string;
+  old_price: number;
+  totalStock: number; // Был stock, переименован для ясности
+  category_id: number; // Был category (string), теперь number
   barcode?: string;
+  description?: string;
+  stocks_by_type?: { fbo: number; fbs: number; crossborder: number };
+  // url больше не приходит от бэкенда, будем генерировать на клиенте
 }
 
 interface FormValues {
@@ -147,9 +148,9 @@ const ProductExportForm: React.FC<ProductExportFormProps> = ({ userId, credentia
     let filtered = [...products];
     
     if (exportType === 'inStock') {
-      filtered = filtered.filter(product => product.stock > 0);
+      filtered = filtered.filter(product => product.totalStock > 0);
     } else if (exportType === 'outOfStock') {
-      filtered = filtered.filter(product => product.stock <= 0);
+      filtered = filtered.filter(product => product.totalStock <= 0);
     }
     
     if (priceFilter === 'withPrice') {
@@ -162,7 +163,7 @@ const ProductExportForm: React.FC<ProductExportFormProps> = ({ userId, credentia
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(product => 
         product.name.toLowerCase().includes(query) || 
-        product.sku.toLowerCase().includes(query)
+        product.offer_id.toLowerCase().includes(query) // Был product.sku
       );
     }
     
@@ -200,21 +201,25 @@ const ProductExportForm: React.FC<ProductExportFormProps> = ({ userId, credentia
 
     // Имитация прогресса и экспорт
     // ... (код экспорта оставим пока без изменений, он будет работать с filteredProducts)
-    const csvHeader = "ID,SKU,Name,Category,Price,Old Price,Stock,Image URL,Product URL,Description,Barcode\n";
+    const csvHeader = "Product ID,Offer ID (SKU),Name,Category ID,Price,Old Price,Total Stock,FBO Stock,FBS Stock,Crossborder Stock,Image URL,Product URL,Description,Barcode\\n";
     let csvContent = csvHeader;
 
     filteredProducts.forEach((product, index) => {
+        const productViewUrl = `https://www.ozon.ru/product/-${product.product_id}`;
         const row = [
-            product.id,
-            product.sku,
-            `"${product.name.replace(/"/g, '""')}"`,
-            `"${product.category.replace(/"/g, '""')}"`,
+            product.product_id,
+            product.offer_id, // Был product.sku
+            `"${product.name.replace(/\"/g, '""')}"`,
+            product.category_id, // Был product.category
             product.price,
-            product.oldPrice,
-            product.stock,
+            product.old_price, // Был product.oldPrice
+            product.totalStock, // Был product.stock
+            product.stocks_by_type?.fbo || 0,
+            product.stocks_by_type?.fbs || 0,
+            product.stocks_by_type?.crossborder || 0,
             product.images.length > 0 ? product.images[0] : 'N/A',
-            product.url,
-            `"${(product.description || '').replace(/"/g, '""').replace(/\n/g, ' ')}"`,
+            productViewUrl, // Был product.url
+            `"${(product.description || '').replace(/\"/g, '""').replace(/\\n/g, ' ')}"`,
             product.barcode || 'N/A'
         ].join(',');
         csvContent += row + '\n';
@@ -307,39 +312,49 @@ const ProductExportForm: React.FC<ProductExportFormProps> = ({ userId, credentia
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Изобр.</th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Название</th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Артикул (SKU)</th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Цена</th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Остаток</th>
+              <th className="p-2 border-b text-left text-sm font-semibold text-gray-600">Изобр.</th>
+              <th className="p-2 border-b text-left text-sm font-semibold text-gray-600">Название</th>
+              <th className="p-2 border-b text-left text-sm font-semibold text-gray-600">Артикул (SKU)</th>
+              <th className="p-2 border-b text-left text-sm font-semibold text-gray-600">Цена</th>
+              <th className="p-2 border-b text-left text-sm font-semibold text-gray-600">Остаток</th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
             {!loadingProducts && filteredProducts.map((product) => (
-              <tr key={product.id}>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  {product.images && product.images.length > 0 ? (
-                    <img src={product.images[0]} alt={product.name} className="h-10 w-10 object-cover rounded" />
-                  ) : (
-                    <div className="h-10 w-10 bg-gray-200 rounded flex items-center justify-center text-gray-400">?</div>
+              <tr key={product.product_id}>
+                <td className="p-2 border-b">
+                  {product.images && product.images.length > 0 && (
+                    <img src={product.images[0]} alt={product.name} className="w-12 h-12 object-cover rounded" />
                   )}
                 </td>
-                <td className="px-6 py-4">
-                  <div className="text-sm font-medium text-gray-900 hover:text-blue-600">
-                    <a href={product.url} target="_blank" rel="noopener noreferrer" title={product.description || product.name}>
-                      {product.name}
-                    </a>
-                  </div>
-                  <div className="text-xs text-gray-500">ID: {product.id}</div>
-                  {product.barcode && <div className="text-xs text-gray-500">Штрихкод: {product.barcode}</div>}
+                <td className="p-2 border-b">
+                  <a 
+                    href={`https://www.ozon.ru/product/-${product.product_id}`} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-blue-600 hover:underline"
+                  >
+                    {product.name}
+                  </a>
+                  <div className="text-xs text-gray-500">ID: {product.product_id}</div>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{product.sku}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {product.price > 0 ? `${product.price.toFixed(2)} ₽` : '-'}
-                    {product.oldPrice > 0 && product.oldPrice > product.price && 
-                        <span className="ml-2 text-xs text-gray-400 line-through">{product.oldPrice.toFixed(2)} ₽</span>}
+                <td className="p-2 border-b text-sm">{product.offer_id}</td>
+                <td className="p-2 border-b text-sm">
+                  {product.price > 0 ? `${product.price.toLocaleString('ru-RU')} ₽` : '-'}
+                  {product.old_price > 0 && product.old_price > product.price && (
+                    <span className="block text-xs text-gray-500 line-through">{product.old_price.toLocaleString('ru-RU')} ₽</span>
+                  )}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{product.stock}</td>
+                <td className="p-2 border-b text-sm">
+                  <div>Общий: {product.totalStock}</div>
+                  {product.stocks_by_type && (
+                    <>
+                      {product.stocks_by_type.fbo > 0 && <div className="text-xs text-gray-500">FBO: {product.stocks_by_type.fbo}</div>}
+                      {product.stocks_by_type.fbs > 0 && <div className="text-xs text-gray-500">FBS: {product.stocks_by_type.fbs}</div>}
+                      {product.stocks_by_type.crossborder > 0 && <div className="text-xs text-gray-500">Crossborder: {product.stocks_by_type.crossborder}</div>}
+                    </>
+                  )}
+                </td>
               </tr>
             ))}
             {!loadingProducts && filteredProducts.length === 0 && (
@@ -359,18 +374,18 @@ const ProductExportForm: React.FC<ProductExportFormProps> = ({ userId, credentia
           <button 
             onClick={handlePrevPage} 
             disabled={pageHistory.length <= 1 || loadingProducts}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Назад
           </button>
           <span className="text-sm text-gray-700">
             Страница {currentPageNumber}
-            {totalItems > 0 && ` (Товаров в магазине: ${totalItems})`}
+            {totalItems > 0 && ` из ~${Math.ceil(totalItems / ITEMS_PER_PAGE)}`} (Товаров в магазине: {totalItems})
           </span>
           <button 
             onClick={handleNextPage} 
             disabled={!currentLastId || loadingProducts || products.length < ITEMS_PER_PAGE}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Вперед
           </button>
