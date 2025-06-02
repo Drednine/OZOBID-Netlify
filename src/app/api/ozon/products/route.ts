@@ -110,9 +110,22 @@ export async function POST(request: NextRequest) {
     console.log(`API ozon/products (v2): Received request for store: ${storeName || 'N/A'}, clientId: ${clientId}, pageSize: ${pageSize}, lastId: ${lastId}`);
 
     // 1. Получение списка товаров (product_id, offer_id)
+    const productListRequestBody: any = {
+      limit: pageSize,
+      last_id: lastId,
+    };
+    // Если lastId пустой (первая страница), его не нужно передавать в Ozon API по некоторым версиям документации
+    if (!lastId) {
+      delete productListRequestBody.last_id;
+    }
+    // Попробуем также не передавать filter, чтобы Ozon использовал свои значения по умолчанию.
+    // Если это не поможет, можно вернуть: filter: { visibility: "ALL" }
+
+    console.log('API ozon/products (v2): Requesting /v2/product/list with body:', productListRequestBody);
+
     const productListResponse = await axios.post(
       'https://api-seller.ozon.ru/v2/product/list',
-      { filter: { visibility: "ALL" }, limit: pageSize, last_id: lastId },
+      productListRequestBody, // Используем измененное тело запроса
       {
         headers: { 'Client-Id': clientId, 'Api-Key': apiKey, 'Content-Type': 'application/json' },
         timeout: OZON_API_TIMEOUT,
