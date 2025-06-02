@@ -111,6 +111,7 @@ export async function POST(request: NextRequest) {
 
     // 1. Получение списка товаров (product_id, offer_id)
     const productListRequestBody: any = {
+      filter: { visibility: "ALL" },
       limit: pageSize,
       last_id: lastId,
     };
@@ -121,7 +122,7 @@ export async function POST(request: NextRequest) {
     // Попробуем также не передавать filter, чтобы Ozon использовал свои значения по умолчанию.
     // Если это не поможет, можно вернуть: filter: { visibility: "ALL" }
 
-    console.log('API ozon/products (v2 -> v3): Requesting /v3/product/list with body:', productListRequestBody);
+    console.log('API ozon/products (v3): Requesting /v3/product/list with body:', productListRequestBody);
 
     const productListResponse = await axios.post(
       'https://api-seller.ozon.ru/v3/product/list',
