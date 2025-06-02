@@ -172,7 +172,7 @@ export const validatePerformanceCredentials = async (credentials: PerformanceCre
   try {
     console.log('validatePerformanceCredentials: Step 2 - Making test call to /api/client/campaign with access token...');
     const validationResponse = await axios.get(
-      'https://api.performance.ozon.ru/api/client/campaign',
+      'https://api-performance.ozon.ru/api/client/campaign',
       {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
