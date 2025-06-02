@@ -104,91 +104,114 @@ export const validateCredentials = async (credentials: OzonCredentials) => {
 
 // Проверка валидности Performance API-ключей
 export const validatePerformanceCredentials = async (credentials: PerformanceCredentials) => {
-  console.log('validatePerformanceCredentials: Validating Performance API credentials (clientId):', credentials.clientId);
-  // Не логируем credentials.apiKey напрямую
+  console.log('validatePerformanceCredentials: Validating Performance API credentials for clientId:', credentials.clientId);
+  // Не логируем credentials.apiKey (client_secret)
 
+  let accessToken = '';
+
+  // Шаг 1: Получение токена доступа
   try {
-    const dateFrom = "2024-05-01";
-    const dateTo = "2024-05-01";
-
-    console.log('validatePerformanceCredentials: Using FIXED dateFrom:', dateFrom, 'dateTo:', dateTo, 'for validation.');
-
-    // Упрощаем тело запроса, убираем groupBy
-    const requestBody = {
-      "dateFrom": dateFrom,
-      "dateTo": dateTo,
-      // "groupBy": ["DATE"] // Убрали для максимального упрощения запроса
-    };
-    console.log('validatePerformanceCredentials: Request body (simplified):', requestBody);
-
-    const response = await axios.post(
-      'https://performance.ozon.ru/api/client/statistics',
-      requestBody,
+    console.log('validatePerformanceCredentials: Step 1 - Requesting access token...');
+    const tokenResponse = await axios.post(
+      'https://api-performance.ozon.ru/api/client/token',
+      {
+        'client_id': credentials.clientId,
+        'client_secret': credentials.apiKey, // Используем apiKey как client_secret
+        'grant_type': 'client_credentials',
+      },
       {
         headers: {
-          'Client-Id': credentials.clientId,
-          'Api-Key': credentials.apiKey,
           'Content-Type': 'application/json',
         },
-        timeout: 20000 // Увеличиваем таймаут до 20 секунд
+        timeout: 15000, // Таймаут для запроса токена
       }
     );
-    console.log('validatePerformanceCredentials: Response status:', response.status);
-    console.log('validatePerformanceCredentials: Response data:', response.data);
 
-     if (response.data && (response.data.result !== undefined || Array.isArray(response.data.rows) || response.data.total !== undefined || typeof response.data === 'string')) {
-        console.log('validatePerformanceCredentials: Validation successful (data structure match)');
-        return { valid: true, error: null };
-    } else if (response.status === 200 && (response.data === null || response.data === "")) { 
-        console.log('validatePerformanceCredentials: Validation successful (empty 200 OK)');
-        return { valid: true, error: null }; 
+    if (tokenResponse.data && tokenResponse.data.access_token) {
+      accessToken = tokenResponse.data.access_token;
+      console.log('validatePerformanceCredentials: Access token obtained successfully.');
     } else {
-        console.warn('validatePerformanceCredentials: Unexpected response structure or status:', { status: response.status, data: response.data });
-        return { valid: false, error: `Неожиданный ответ от Ozon Performance API (status: ${response.status})` };
+      console.warn('validatePerformanceCredentials: Failed to obtain access token. Response data:', tokenResponse.data);
+      return { valid: false, error: 'Не удалось получить токен доступа от Ozon Performance API.' };
     }
   } catch (error) {
-    console.error('validatePerformanceCredentials: Error caught:', error);
+    console.error('validatePerformanceCredentials: Error during access token request:', error);
+    let errorMessage = 'Ошибка при запросе токена доступа Ozon Performance API';
     if (error instanceof AxiosError) {
-      let errorMessage = 'Ошибка проверки учетных данных Performance API';
-      console.error('validatePerformanceCredentials: AxiosError message:', error.message);
-      if (error.code) {
-        console.error('validatePerformanceCredentials: AxiosError code:', error.code);
-      }
-      if (error.response) {
-        console.error('validatePerformanceCredentials: AxiosError response status:', error.response.status);
-        console.error('validatePerformanceCredentials: AxiosError response data:', error.response.data);
-      }
-
       if (error.code === 'ECONNABORTED' || error.message.toLowerCase().includes('timeout')) {
-        errorMessage = `Сетевая ошибка: Таймаут (${error.config?.timeout}ms) при обращении к Performance API. Сервер Ozon не ответил вовремя.`;
-        console.error('validatePerformanceCredentials: AxiosError - Timeout occurred');
+        errorMessage = `Сетевая ошибка: Таймаут (${error.config?.timeout}ms) при запросе токена доступа.`;
       } else if (error.isAxiosError && !error.response) {
-        errorMessage = `Сетевая ошибка при обращении к Performance API: ${error.message}`;
-        if (error.code) {
-            errorMessage += ` (Code: ${error.code})`;
-        }
+        errorMessage = `Сетевая ошибка при запросе токена доступа: ${error.message}${error.code ? ` (Code: ${error.code})` : ''}`;
       } else if (error.response) {
-        if (error.response.status === 403) {
-          errorMessage = 'Неверные учетные данные Performance API (403)';
-        } else if (error.response.status === 404) {
-          errorMessage = 'Эндпоинт проверки Performance API не найден (404)';
-        } else {
-          errorMessage = `Ошибка от Performance API (status: ${error.response.status})`;
-        }
-        
+        errorMessage = `Ошибка от Performance API (токен) (status: ${error.response.status})`;
         if (error.response.data) {
           const ozonError = error.response.data as any;
           let details = '';
+          if (ozonError.error_description) {
+            details = ozonError.error_description;
+          } else if (ozonError.error) {
+            details = ozonError.error;
+          } else if (typeof ozonError === 'string') {
+            details = ozonError;
+          } else {
+            details = JSON.stringify(ozonError);
+          }
+          errorMessage += `: ${details}`;
+        }
+      } else {
+        errorMessage = `Ошибка Axios при запросе токена: ${error.message}`;
+      }
+    } else {
+      const unknownError = error as Error;
+      errorMessage = `Неизвестная ошибка при запросе токена: ${unknownError.message || 'No error message'}`;
+    }
+    return { valid: false, error: errorMessage };
+  }
+
+  // Шаг 2: Проверочный запрос с использованием токена доступа
+  try {
+    console.log('validatePerformanceCredentials: Step 2 - Making test call to /api/client/campaign with access token...');
+    const validationResponse = await axios.get(
+      'https://api.performance.ozon.ru/api/client/campaign',
+      {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Client-Id': credentials.clientId, // Некоторые API Ozon требуют Client-Id даже с Bearer токеном
+          'Content-Type': 'application/json',
+        },
+        timeout: 15000, // Таймаут для проверочного запроса
+      }
+    );
+
+    // Успешный ответ (даже пустой список кампаний) означает, что токен валиден
+    if (validationResponse.status === 200) {
+      console.log('validatePerformanceCredentials: Test call successful. Credentials are valid.');
+      return { valid: true, error: null };
+    } else {
+      console.warn('validatePerformanceCredentials: Test call failed with status:', validationResponse.status, 'Data:', validationResponse.data);
+      return { valid: false, error: `Неожиданный ответ от Ozon Performance API при проверке токена (status: ${validationResponse.status})` };
+    }
+  } catch (error) {
+    console.error('validatePerformanceCredentials: Error during test call with access token:', error);
+    let errorMessage = 'Ошибка при проверке токена доступа с Ozon Performance API';
+     if (error instanceof AxiosError) {
+      if (error.code === 'ECONNABORTED' || error.message.toLowerCase().includes('timeout')) {
+        errorMessage = `Сетевая ошибка: Таймаут (${error.config?.timeout}ms) при тестовом запросе к Performance API.`;
+      } else if (error.isAxiosError && !error.response) {
+        errorMessage = `Сетевая ошибка при тестовом запросе к Performance API: ${error.message}${error.code ? ` (Code: ${error.code})` : ''}`;
+      } else if (error.response) {
+        // Токен может быть невалидным (401 Unauthorized) или другие ошибки
+        errorMessage = `Ошибка от Performance API (тест) (status: ${error.response.status})`;
+        if (error.response.data) {
+          const ozonError = error.response.data as any;
+           let details = '';
           if (typeof ozonError === 'string') {
             details = ozonError;
-          } else if (ozonError.message) {
+          } else if (ozonError.message) { // Стандартный формат ошибки Ozon Seller
             details = ozonError.message;
-          } else if (ozonError.error && ozonError.error.message) {
+          } else if (ozonError.error && ozonError.error.message) { // Иногда бывает вложенная структура
             details = ozonError.error.message;
-            if (ozonError.error.data) {
-               details += ` (${JSON.stringify(ozonError.error.data)})`;
-            }
-          } else if (ozonError.code && ozonError.message) { 
+          } else if (ozonError.code && ozonError.message) { // Другой возможный формат
               details = `Code: ${ozonError.code}, Message: ${ozonError.message}`;
           } else {
             details = JSON.stringify(ozonError);
@@ -196,22 +219,13 @@ export const validatePerformanceCredentials = async (credentials: PerformanceCre
           errorMessage += `: ${details}`;
         }
       } else {
-         errorMessage = `Ошибка Axios при обращении к Performance API: ${error.message}`;
+         errorMessage = `Ошибка Axios при тестовом запросе к Performance API: ${error.message}`;
       }
-      return { 
-        valid: false, 
-        error: errorMessage
-      };
+    } else {
+      const unknownError = error as Error;
+      errorMessage = `Неизвестная ошибка при тестовом запросе к Performance API: ${unknownError.message || 'No error message'}`;
     }
-    const unknownError = error as Error;
-    console.error('validatePerformanceCredentials: Unknown error message:', unknownError.message);
-    if (unknownError.stack) {
-        console.error('validatePerformanceCredentials: Unknown error stack:', unknownError.stack);
-    }
-    return {
-      valid: false,
-      error: `Неизвестная ошибка при проверке Performance API: ${unknownError.message || 'No error message'}`
-    };
+    return { valid: false, error: errorMessage };
   }
 };
 
