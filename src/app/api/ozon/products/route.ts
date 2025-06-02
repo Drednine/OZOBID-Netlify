@@ -121,11 +121,11 @@ export async function POST(request: NextRequest) {
     // Попробуем также не передавать filter, чтобы Ozon использовал свои значения по умолчанию.
     // Если это не поможет, можно вернуть: filter: { visibility: "ALL" }
 
-    console.log('API ozon/products (v2): Requesting /v2/product/list with body:', productListRequestBody);
+    console.log('API ozon/products (v2 -> v3): Requesting /v3/product/list with body:', productListRequestBody);
 
     const productListResponse = await axios.post(
-      'https://api-seller.ozon.ru/v2/product/list',
-      productListRequestBody, // Используем измененное тело запроса
+      'https://api-seller.ozon.ru/v3/product/list',
+      productListRequestBody,
       {
         headers: { 'Client-Id': clientId, 'Api-Key': apiKey, 'Content-Type': 'application/json' },
         timeout: OZON_API_TIMEOUT,
@@ -139,9 +139,9 @@ export async function POST(request: NextRequest) {
 
     const productListItems: OzonProductListItem[] = productListResponse.data.result.items || [];
     const nextLastId: string = productListResponse.data.result.last_id || "";
-    const totalItemsInList: number = productListResponse.data.result.total || 0;
+    const totalItemsInList: number = productListResponse.data.result.total || productListItems.length;
 
-    console.log(`API ozon/products (v2): Fetched ${productListItems.length} product IDs. Next last_id: ${nextLastId}, Total in list: ${totalItemsInList}`);
+    console.log(`API ozon/products (v3): Fetched ${productListItems.length} product IDs. Next last_id: ${nextLastId}, Total in list (calculated): ${totalItemsInList}`);
 
     if (productListItems.length === 0) {
       return NextResponse.json({ items: [], last_id: nextLastId, total_items: totalItemsInList });
