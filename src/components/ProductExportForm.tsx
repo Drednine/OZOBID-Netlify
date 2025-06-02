@@ -188,7 +188,7 @@ const ProductExportForm: React.FC<ProductExportFormProps> = ({ userId, credentia
     let csvContent = csvHeader;
 
     filteredProducts.forEach((product, index) => {
-        const productViewUrl = `https://www.ozon.ru/product/-${product.product_id}`;
+        const productViewUrl = `https://www.ozon.ru/product/${product.product_id}`;
         const row = [
             product.product_id,
             product.offer_id,
@@ -301,7 +301,7 @@ const ProductExportForm: React.FC<ProductExportFormProps> = ({ userId, credentia
                 </td>
                 <td className="p-2 border-b align-top">
                   <a 
-                    href={`https://www.ozon.ru/product/-${product.product_id}`} 
+                    href={`https://www.ozon.ru/product/${product.product_id}`} 
                     target="_blank" 
                     rel="noopener noreferrer"
                     className="text-blue-600 hover:underline text-sm font-medium"

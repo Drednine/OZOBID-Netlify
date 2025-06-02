@@ -159,21 +159,32 @@ export async function POST(request: NextRequest) {
       "Content-Type": "application/json",
     };
 
-    const productListFilter: any = { visibility: "ALL" };
+    // Формируем тело запроса к Ozon API
+    const requestBody: any = {
+      filter: {
+        visibility: "ALL",
+      },
+      limit: pageSize,
+    };
+
     if (searchTerm) {
-      productListFilter.search = searchTerm;
-    } else if (lastId) {
-      productListFilter.last_id = lastId;
+      requestBody.filter.search = searchTerm;
+      // При новом поиске (когда searchTerm задан, а lastId еще нет или должен быть сброшен с фронтенда)
+      // Ozon должен сам обработать начало списка.
+      // Если же lastId передан ВМЕСТЕ с searchTerm (для пагинации результатов поиска),
+      // он будет добавлен ниже.
     }
+
+    if (lastId) {
+      requestBody.last_id = lastId;
+    }
+
+    console.log("Ozon API Request Body:", JSON.stringify(requestBody, null, 2));
 
     const productListResponse = await fetch("https://api-seller.ozon.ru/v3/product/list", {
       method: "POST",
       headers,
-      body: JSON.stringify({
-        filter: productListFilter,
-        limit: pageSize,
-        ...(searchTerm ? {} : { last_id: lastId }),
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     if (!productListResponse.ok) {
