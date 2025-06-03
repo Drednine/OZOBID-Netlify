@@ -4,15 +4,16 @@ import { Handler, HandlerEvent, HandlerContext, HandlerResponse } from '@netlify
 
 // Инициализация Supabase клиента (используйте переменные окружения)
 const supabaseUrl = process.env.SUPABASE_URL!;
-const supabaseAnonKey = process.env.SUPABASE_ANON_KEY!;
+// const supabaseAnonKey = process.env.SUPABASE_ANON_KEY!;
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
-if (!supabaseUrl || !supabaseAnonKey) {
-    console.error("Supabase URL and Anon Key are required but not found in environment variables.");
+if (!supabaseUrl || !supabaseServiceRoleKey) {
+    console.error("Supabase URL and Service Role Key are required but not found in environment variables.");
     // В реальном сценарии здесь лучше выбросить ошибку, чтобы функция не продолжала выполнение
-    // throw new Error("Supabase URL and Anon Key are required."); 
+    throw new Error("Supabase URL and Service Role Key are required."); 
 }
 
-const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKey);
+const supabaseAdmin: SupabaseClient = createClient(supabaseUrl, supabaseServiceRoleKey);
 
 // Интерфейсы (могут быть вынесены в общий файл типов позже)
 interface OzonPerformanceCredentials {
@@ -160,7 +161,7 @@ const handler: Handler = async (event: HandlerEvent, context: HandlerContext): P
 
     try {
         // 1. Получить все активные настройки кампаний
-        const { data: settings, error: settingsError } = await supabase
+        const { data: settings, error: settingsError } = await supabaseAdmin
             .from('user_campaign_settings')
             .select(`
                 *,
@@ -235,7 +236,7 @@ const handler: Handler = async (event: HandlerEvent, context: HandlerContext): P
                     if (success) ozonCampaignCurrentStatus = 'CAMPAIGN_STATE_STOPPED_BY_LIMIT'; // Наш внутренний, или реальный от Ozon
                     newAppControlledStatus = 'PAUSED_DAILY_LIMIT_REACHED';
                     // Обновляем дату приостановки по лимиту
-                    await supabase.from('user_campaign_settings').update({ last_daily_limit_pause_date: currentDate }).eq('id', setting.id);
+                    await supabaseAdmin.from('user_campaign_settings').update({ last_daily_limit_pause_date: currentDate }).eq('id', setting.id);
                  }
             }
 
@@ -252,7 +253,7 @@ const handler: Handler = async (event: HandlerEvent, context: HandlerContext): P
                 updatePayload.last_daily_limit_pause_date = null;
             }
 
-            const { error: updateError } = await supabase
+            const { error: updateError } = await supabaseAdmin
                 .from('user_campaign_settings')
                 .update(updatePayload)
                 .eq('id', setting.id);
