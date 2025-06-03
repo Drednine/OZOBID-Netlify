@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 // Инициализация Supabase клиента
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Используем СЕРВИСНЫЙ КЛЮЧ для операций на сервере
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+
+// Создаем отдельный клиент для этого API роута с сервисным ключом
+const supabaseAdmin: SupabaseClient = createClient(supabaseUrl, supabaseServiceRoleKey);
 
 // Интерфейс для данных, приходящих с фронтенда
 interface UserCampaignSettingInput {
@@ -60,7 +63,7 @@ export async function POST(request: NextRequest) {
     if (id) {
       // Если ID предоставлен, пытаемся обновить по ID
       // Это более явное обновление, если фронтенд знает ID настройки
-      const { data, error: updateError } = await supabase
+      const { data, error: updateError } = await supabaseAdmin
         .from('user_campaign_settings')
         .update(dataToUpsert)
         .eq('id', id)
@@ -74,7 +77,7 @@ export async function POST(request: NextRequest) {
       // Это требует наличия UNIQUE ограничения на (user_id, performance_credentials_id, ozon_campaign_id)
       // или другого подходящего ограничения, указанного в onConflict.
       // Если такого ограничения нет, onConflict нужно будет убрать или настроить правильно.
-      const { data, error: upsertError } = await supabase
+      const { data, error: upsertError } = await supabaseAdmin
         .from('user_campaign_settings')
         .upsert(dataToUpsert, {
           onConflict: 'user_id,performance_credentials_id,ozon_campaign_id', // Убедитесь, что такой UNIQUE constraint есть
