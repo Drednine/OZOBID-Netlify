@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@/utils/supabase/client';
 
 interface AuthGuardProps {
   children: React.ReactNode;
@@ -10,6 +10,7 @@ interface AuthGuardProps {
 
 export default function AuthGuard({ children }: AuthGuardProps) {
   const router = useRouter();
+  const supabase = createClient();
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
