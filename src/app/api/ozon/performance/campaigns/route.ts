@@ -109,20 +109,21 @@ export async function POST(request: NextRequest) {
       console.log('[API CAMPAIGNS] Ozon API response status:', ozonResponse.status);
       console.log('[API CAMPAIGNS] Ozon API raw response data:', JSON.stringify(ozonResponse.data, null, 2));
 
-      // Улучшенная проверка структуры ответа
-      if (ozonResponse.data && ozonResponse.data.result && Array.isArray(ozonResponse.data.result.campaigns)) {
+      // Исправленная логика извлечения кампаний
+      if (ozonResponse.data && Array.isArray(ozonResponse.data.list)) {
+        ozonCampaigns = ozonResponse.data.list;
+      } else if (ozonResponse.data && ozonResponse.data.result && Array.isArray(ozonResponse.data.result.campaigns)) {
+        // Оставим старую логику на случай, если Ozon вернет другой формат для других случаев
         ozonCampaigns = ozonResponse.data.result.campaigns;
-      } else if (ozonResponse.data && Array.isArray(ozonResponse.data.campaigns)) { // Некоторые API могут возвращать массив напрямую
+      } else if (ozonResponse.data && Array.isArray(ozonResponse.data.campaigns)) {
         ozonCampaigns = ozonResponse.data.campaigns;
-      } else if (ozonResponse.data && ozonResponse.data.result && Array.isArray(ozonResponse.data.result)) { // Еще один возможный вариант
+      } else if (ozonResponse.data && ozonResponse.data.result && Array.isArray(ozonResponse.data.result)) {
          ozonCampaigns = ozonResponse.data.result;
-      }
-       else if (ozonResponse.data && Array.isArray(ozonResponse.data)) { // И если просто массив пришел
+      } else if (ozonResponse.data && Array.isArray(ozonResponse.data)) {
          ozonCampaigns = ozonResponse.data;
-      }
-      else {
+      } else {
         console.warn("[API CAMPAIGNS] Ozon API returned campaigns in an unexpected format or an empty list. Raw data:", ozonResponse.data);
-        ozonCampaigns = []; // Оставляем пустым, если формат неизвестен или нет campaigns
+        ozonCampaigns = [];
       }
       console.log(`[API CAMPAIGNS] Parsed ${ozonCampaigns.length} campaigns from Ozon.`);
 
