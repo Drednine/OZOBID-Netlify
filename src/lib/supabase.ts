@@ -1,9 +1,22 @@
 import { createClient } from '@supabase/supabase-js';
 
 // ✅ Инициализация клиента Supabase
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-export const supabase = createClient(supabaseUrl, supabaseKey);
+console.log('src/lib/supabase.ts: Initializing Supabase client...');
+console.log('src/lib/supabase.ts: NEXT_PUBLIC_SUPABASE_URL available?', !!process.env.NEXT_PUBLIC_SUPABASE_URL);
+console.log('src/lib/supabase.ts: NEXT_PUBLIC_SUPABASE_ANON_KEY available?', !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseKey) {
+  console.error('src/lib/supabase.ts: Supabase URL or Key is missing! Check environment variables.');
+  // Можно даже выбросить ошибку, чтобы это было заметнее, но пока ограничимся console.error
+  // throw new Error('Supabase URL or Key is missing! Check environment variables.');
+}
+
+// Используем значения, даже если они null/undefined, createClient сам обработает это и выдаст ошибку, если они невалидны.
+// Восклицательные знаки удалены, так как мы добавили проверку выше.
+export const supabase = createClient(supabaseUrl!, supabaseKey!);
 
 // Типы для настроек бюджета
 export interface BudgetSettings {

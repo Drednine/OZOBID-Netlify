@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@/utils/supabase/client';
 import AuthGuard from '@/components/AuthGuard';
 import MultiStoreForm from '@/components/MultiStoreForm';
 import ProductExportForm from '@/components/ProductExportForm';
@@ -23,6 +23,7 @@ interface Store {
 export default function DashboardPage() {
   console.log('DashboardPage: Component rendering started.');
   const router = useRouter();
+  const supabase = createClient();
   const [activeTab, setActiveTab] = useState('stores'); // Значение по умолчанию
   const [userId, setUserId] = useState<string | null>(null);
   
