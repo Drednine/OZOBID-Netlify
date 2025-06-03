@@ -40,7 +40,7 @@ interface FormValues {
   priceFilter: 'all' | 'withPrice' | 'withoutPrice';
 }
 
-const ITEMS_PER_PAGE = 20; // Количество товаров на странице
+const ITEMS_PER_PAGE = 200; // Количество товаров на странице
 
 const ProductExportForm: React.FC<ProductExportFormProps> = ({ userId, credentials }) => {
   const [loadingProducts, setLoadingProducts] = useState(false);

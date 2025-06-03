@@ -147,7 +147,7 @@ async function batchRequest<T, R>(
 
 export async function POST(request: NextRequest) {
   try {
-    const { clientId, apiKey, pageSize = 100, lastId = "", searchTerm = "" } = await request.json();
+    const { clientId, apiKey, pageSize = 200, lastId = "", searchTerm = "" } = await request.json();
 
     if (!clientId || !apiKey) {
       return NextResponse.json({ error: "Client ID and API Key are required" }, { status: 400 });
