@@ -156,7 +156,8 @@ export async function POST(request: NextRequest) {
     // 3. Объединяем данные
     const combinedCampaigns: CombinedCampaign[] = ozonCampaigns.map(ozonCampaign => {
       const setting = userSettings?.find(s => s.ozon_campaign_id === ozonCampaign.id);
-      console.log(`[API CAMPAIGNS] For Ozon Campaign ID: ${ozonCampaign.id} (${ozonCampaign.title}), Found UserSetting: ${setting ? JSON.stringify(setting) : 'NOT FOUND'}`);
+      // console.log(`[API CAMPAIGNS] For Ozon Campaign ID: ${ozonCampaign.id} (${ozonCampaign.title}), Found UserSetting: ${setting ? JSON.stringify(setting) : 'NOT FOUND'}`);
+      console.log(`[API CAMPAIGNS] MAP ITERATION: Ozon ID ${ozonCampaign.id}, Setting found: ${!!setting}`);
       return {
         ...ozonCampaign,
         userSettings: setting || undefined,
