@@ -3,8 +3,15 @@ import axios from 'axios';
 import { Handler, HandlerEvent, HandlerContext, HandlerResponse } from '@netlify/functions';
 
 // Инициализация Supabase клиента (используйте переменные окружения)
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const supabaseUrl = process.env.SUPABASE_URL!;
+const supabaseAnonKey = process.env.SUPABASE_ANON_KEY!;
+
+if (!supabaseUrl || !supabaseAnonKey) {
+    console.error("Supabase URL and Anon Key are required but not found in environment variables.");
+    // В реальном сценарии здесь лучше выбросить ошибку, чтобы функция не продолжала выполнение
+    // throw new Error("Supabase URL and Anon Key are required."); 
+}
+
 const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKey);
 
 // Интерфейсы (могут быть вынесены в общий файл типов позже)

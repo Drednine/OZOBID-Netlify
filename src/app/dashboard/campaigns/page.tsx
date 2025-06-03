@@ -3,178 +3,173 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { useRouter } from 'next/navigation'; // Добавим useRouter
-import { supabase } from '@/lib/supabase'; // Прямой импорт supabase
 import AuthGuard from '@/components/AuthGuard'; // Импорт AuthGuard
 import { OzonPerformanceCredentials } from '@/lib/types/ozon'; // Обновленный путь к типу
+import { UserCampaignSettings, CombinedCampaign as LocalCombinedCampaign } from '@/lib/types/campaigns'; // Предполагаем, что этот файл существует
+import { createClient } from '@/utils/supabase/client'; // Предполагаем, что этот файл существует
+import { User, RealtimePostgresChangesPayload, REALTIME_SUBSCRIBE_STATES } from '@supabase/supabase-js';
 
 // Интерфейсы, скопированные или адаптированные из API маршрута
-interface OzonCampaignData {
-  id: number;
-  title: string;
-  state: string;
-  budget: number;
-  dailyBudget: number;
-  // ... другие поля от Ozon
-}
+// OzonCampaignData и UserCampaignSettingData уже определены в '@/lib/types/campaigns' как часть CombinedCampaign
+// Так что локальные определения можно будет удалить, если импорт работает корректно.
+// Пока оставим для ясности, но нужно будет проверить и унифицировать.
 
-interface UserCampaignSettingData {
-  id?: string; // id из нашей БД, может отсутствовать для новых настроек
-  ozon_campaign_id: number;
-  performance_credentials_id?: string; // Будет установлено при сохранении
-  user_id?: string; // Будет установлено при сохранении
-  custom_daily_budget_limit: number | null;
-  is_budget_control_enabled: boolean;
-  app_controlled_status: string | null;
-  // Добавим поля для отслеживания изменений и сохранения
-  isDirty?: boolean; // Флаг, что настройки были изменены
-  saveError?: string | null; // Ошибка сохранения для конкретной строки
-  isSaving?: boolean; // Флаг, что строка сохраняется
-  scheduling_enabled: boolean;
-  schedule_start_time: string | null;
-  schedule_end_time: string | null;
-  schedule_days: string | null;
-  last_checked_at: string | null;
-  last_daily_limit_pause_date: string | null;
-  cached_daily_spend: number | null;
-  cached_ozon_status: string | null;
-}
+// interface OzonCampaignData {
+// id: number;
+// title: string;
+// state: string;
+// budget: number;
+// dailyBudget: number;
+//   // ... другие поля от Ozon
+// }
 
-interface CombinedCampaign extends OzonCampaignData {
-  userSettings: UserCampaignSettingData; // Теперь userSettings всегда будет объектом
-}
+// interface UserCampaignSettingData {
+//   id?: string; 
+//   ozon_campaign_id: number;
+//   performance_credentials_id?: string; 
+//   user_id?: string; 
+//   custom_daily_budget_limit: number | null;
+//   is_budget_control_enabled: boolean;
+//   app_controlled_status: string | null;
+//   isDirty?: boolean; 
+//   saveError?: string | null; 
+//   isSaving?: boolean; 
+//   scheduling_enabled: boolean;
+//   schedule_start_time: string | null;
+//   schedule_end_time: string | null;
+//   schedule_days: string[] | null; // Изменено на string[]
+//   last_checked_at: string | null;
+//   last_daily_limit_pause_date: string | null;
+//   cached_daily_spend: number | null;
+//   cached_ozon_status: string | null;
+// }
+
+// Используем импортированный тип, если он доступен, иначе LocalCombinedCampaign
+// interface CombinedCampaign extends OzonCampaignData {
+//   userSettings: UserCampaignSettingData; 
+// }
+
+type CombinedCampaignType = LocalCombinedCampaign; // Используем псевдоним для импортированного типа
 
 const CampaignsPage = () => {
   const router = useRouter(); // useRouter
-  const [user, setUser] = useState<any>(null); // Состояние для пользователя
-  const [allStores, setAllStores] = useState<OzonPerformanceCredentials[]>([]);
-  const [activeStoreId, setActiveStoreId] = useState<string | null>(null);
-  const [campaigns, setCampaigns] = useState<CombinedCampaign[]>([]);
-  const [loading, setLoading] = useState<boolean>(true); // Изначально true для загрузки пользователя
+  const supabase = createClient();
+  const [user, setUser] = useState<User | null>(null);
+  const [stores, setStores] = useState<OzonPerformanceCredentials[]>([]);
+  const [activeStoreCreds, setActiveStoreCreds] = useState<OzonPerformanceCredentials | null>(null);
+  const [campaigns, setCampaigns] = useState<CombinedCampaignType[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [savingStatus, setSavingStatus] = useState<{[key: number]: boolean}>({});
+  const [errorStatus, setErrorStatus] = useState<{[key: number]: string | null}>({});
 
-  // 1. Загрузка пользователя при монтировании
-  useEffect(() => {
-    const fetchUser = async () => {
-      const { data: { user: currentUser }, error: authError } = await supabase.auth.getUser();
-      if (authError || !currentUser) {
-        router.push('/auth/login');
-        return;
-      }
-      setUser(currentUser);
-    };
-    fetchUser();
-  }, [router]);
-
-  // 2. Загрузка магазинов (Performance API credentials) пользователя
-  const loadStores = useCallback(async () => {
-    if (!user) {
+  const fetchUserDataAndStores = useCallback(async () => {
+    const { data: { user: currentUser }, error: authError } = await supabase.auth.getUser();
+    if (authError || !currentUser) {
+      router.push('/auth/login');
       return;
     }
-    setLoading(true);
-    setError(null);
-    try {
-      const { data, error: dbError } = await supabase
-        .from('ozon_performance_credentials')
-        .select('*')
-        .eq('user_id', user.id);
-      if (dbError) throw dbError;
-      if (Array.isArray(data)) {
-        setAllStores(data);
-        if (data.length > 0 && !activeStoreId) {
-          setActiveStoreId(data[0].id);
-        }
-      } else {
-        setAllStores([]);
+    setUser(currentUser);
+
+    const { data, error: dbError } = await supabase
+      .from('ozon_performance_credentials')
+      .select('*')
+      .eq('user_id', currentUser.id);
+    if (dbError) throw dbError;
+    if (Array.isArray(data)) {
+      setStores(data);
+      if (data.length > 0 && !activeStoreCreds) {
+        setActiveStoreCreds(data[0]);
       }
-    } catch (err: any) {
-      console.error("Error loading performance stores:", err);
-      setError("Ошибка загрузки магазинов Performance API.");
-      setAllStores([]);
-    } finally {
-      setLoading(false);
+    } else {
+      setStores([]);
     }
-  }, [user, activeStoreId]);
+  }, [router, supabase]);
 
   useEffect(() => {
-    if (user) {
-      loadStores();
-    }
-  }, [user, loadStores]);
+    fetchUserDataAndStores();
+  }, [fetchUserDataAndStores]);
 
-  // 3. Загрузка кампаний для активного магазина
   const fetchCampaigns = useCallback(async () => {
-    if (!user || !activeStoreId) {
+    if (!user || !activeStoreCreds) {
       setCampaigns([]);
-      return;
-    }
-    const activeStore = allStores.find(store => store.id === activeStoreId);
-    if (!activeStore || !activeStore.ozon_client_id || !activeStore.ozon_client_secret) {
-      setError("Учетные данные Performance API для выбранного магазина не найдены или неполны.");
-      setCampaigns([]);
+      setLoading(false);
+      console.log('CampaignsPage: No user or activeStoreCreds, campaigns set to empty.');
       return;
     }
     setLoading(true);
     setError(null);
+    console.log('CampaignsPage: Fetching campaigns for store:', activeStoreCreds.name, 'PerformanceCredsId:', activeStoreCreds.id);
     try {
-      const response = await axios.post<OzonCampaignData[]>('/api/ozon/performance/campaigns', {
-        clientId: activeStore.ozon_client_id,
-        clientSecret: activeStore.ozon_client_secret,
-        userId: user.id,
-        performanceCredentialsId: activeStore.id,
+      const response = await fetch('/api/ozon/performance/campaigns', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clientId: activeStoreCreds.ozon_client_id,
+          clientSecret: activeStoreCreds.ozon_client_secret,
+          userId: user.id,
+          performanceCredentialsId: activeStoreCreds.id,
+        }),
       });
-      
-      const processedCampaigns = response.data.map((campaignWithPotentialSettings: any) => {
-        const ozonData = campaignWithPotentialSettings;
-        const existingSettings = campaignWithPotentialSettings.userSettings;
-        return {
-          ...ozonData,
-          userSettings: {
-            id: existingSettings?.id,
-            ozon_campaign_id: ozonData.id,
-            performance_credentials_id: activeStore.id,
-            user_id: user.id,
-            custom_daily_budget_limit: existingSettings?.custom_daily_budget_limit ?? null,
-            is_budget_control_enabled: existingSettings?.is_budget_control_enabled ?? false,
-            app_controlled_status: existingSettings?.app_controlled_status ?? 'USER_MANAGED',
-            scheduling_enabled: existingSettings?.scheduling_enabled ?? false,
-            schedule_start_time: existingSettings?.schedule_start_time ?? null,
-            schedule_end_time: existingSettings?.schedule_end_time ?? null,
-            schedule_days: existingSettings?.schedule_days ?? null,
-            last_checked_at: existingSettings?.last_checked_at ?? null,
-            last_daily_limit_pause_date: existingSettings?.last_daily_limit_pause_date ?? null,
-            cached_daily_spend: existingSettings?.cached_daily_spend ?? null,
-            cached_ozon_status: existingSettings?.cached_ozon_status ?? null,
-            isDirty: false,
-            saveError: null,
-            isSaving: false,
-          } as UserCampaignSettingData,
-        };
-      });
-      setCampaigns(processedCampaigns as CombinedCampaign[]);
+      console.log('CampaignsPage: API response status:', response.status);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Failed to parse error response' }));
+        console.error('CampaignsPage: API error response data:', errorData);
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+      }
+      const data: CombinedCampaignType[] = await response.json();
+      console.log('CampaignsPage: Data received from API:', data);
+
+      // Ensure all settings fields are initialized
+      const processedCampaigns = data.map(campaign => ({
+        ...campaign,
+        userSettings: campaign.userSettings || {
+          ozon_campaign_id: campaign.id, // Используем campaign.id из OzonCampaignData
+          user_id: user.id,
+          performance_credentials_id: activeStoreCreds.id,
+          custom_daily_budget_limit: null,
+          is_budget_control_enabled: false,
+          app_controlled_status: 'USER_MANAGED',
+          scheduling_enabled: false,
+          schedule_start_time: null,
+          schedule_end_time: null,
+          schedule_days: [], // Инициализируем как пустой массив
+          last_checked_at: null,
+          cached_daily_spend: null,
+          cached_ozon_status: campaign.state,
+          last_daily_limit_pause_date: null,
+        }
+      }));
+      console.log('CampaignsPage: Processed campaigns with initialized settings:', processedCampaigns);
+      setCampaigns(processedCampaigns);
     } catch (err: any) {
-      console.error("Error fetching campaigns:", err);
-      setError(err.response?.data?.error || "Ошибка загрузки кампаний.");
+      console.error('CampaignsPage: Error fetching campaigns:', err);
+      setError(err.message);
       setCampaigns([]);
     } finally {
       setLoading(false);
     }
-  }, [user, activeStoreId, allStores]);
+  }, [user, activeStoreCreds, supabase]);
 
   useEffect(() => {
-    if (user && activeStoreId) {
-      setCampaigns([]);
+    if (user && activeStoreCreds) {
       fetchCampaigns();
+    } else {
+      // Clear campaigns if no user or active store
+      setCampaigns([]);
+      setLoading(false) // Ensure loading is false if there's nothing to load
+      console.log('CampaignsPage: useEffect - No user or activeStoreCreds, clearing campaigns and stopping loading.');
     }
-  }, [user, activeStoreId, fetchCampaigns]);
+  }, [user, activeStoreCreds, fetchCampaigns]);
 
-  // === Supabase Realtime Subscription ===
+  // Realtime subscription
   useEffect(() => {
-    if (!user || !activeStoreId) {
+    if (!user || !activeStoreCreds) {
       return;
     }
 
     const subscription = supabase
-      .channel(`user_campaign_settings:user_id=eq.${user.id}:performance_credentials_id=eq.${activeStoreId}`)
+      .channel(`user_campaign_settings:user_id=eq.${user.id}:performance_credentials_id=eq.${activeStoreCreds.id}`)
       .on(
         'postgres_changes',
         { 
@@ -183,36 +178,32 @@ const CampaignsPage = () => {
           table: 'user_campaign_settings',
           filter: `user_id=eq.${user.id}`
         },
-        (payload) => {
-          console.log('Supabase Realtime: Campaign setting UPDATE received:', payload);
-          const updatedSetting = payload.new as UserCampaignSettingData;
-          
-          if (updatedSetting.performance_credentials_id !== activeStoreId) {
-            console.log('Realtime update skipped: performance_credentials_id does not match active store.');
-            return;
-          }
+        (payload: RealtimePostgresChangesPayload<UserCampaignSettings>) => {
+          console.log('CampaignsPage: Realtime update received:', payload.new);
+          // Убедимся, что payload.new соответствует UserCampaignSettings
+          const newSettings = payload.new as UserCampaignSettings;
 
-          setCampaigns((prevCampaigns) =>
-            prevCampaigns.map((campaign) =>
-              campaign.userSettings.ozon_campaign_id === updatedSetting.ozon_campaign_id
-                ? {
-                    ...campaign,
-                    userSettings: {
-                        ...campaign.userSettings,
-                        ...updatedSetting,
-                        isDirty: campaign.userSettings.isDirty,
-                        isSaving: campaign.userSettings.isSaving,
-                        saveError: campaign.userSettings.saveError,
-                    } as UserCampaignSettingData,
-                  }
-                : campaign
-            )
+          setCampaigns(prevCampaigns =>
+            prevCampaigns.map(c => {
+              if (c.userSettings && newSettings.id && c.userSettings.id === newSettings.id) {
+                return { ...c, userSettings: { ...c.userSettings, ...newSettings } };
+              }
+              // Случай когда у нас еще нет c.userSettings.id (новая запись), но есть ozon_campaign_id
+              if (c.userSettings && newSettings.ozon_campaign_id === c.userSettings.ozon_campaign_id && newSettings.performance_credentials_id === c.userSettings.performance_credentials_id) {
+                 // Здесь, возможно, стоит полностью заменить userSettings на newSettings, 
+                 // если newSettings содержит все необходимые поля, включая те, что не приходят с сервера (isDirty и т.д.)
+                 // или аккуратно смержить, сохраняя локальные флаги.
+                 // Пока что просто мержим.
+                return { ...c, userSettings: { ...c.userSettings, ...newSettings } };
+              }
+              return c;
+            })
           );
         }
       )
-      .subscribe((status, err) => {
+      .subscribe((status: `${REALTIME_SUBSCRIBE_STATES}`, err?: Error) => {
         if (status === 'SUBSCRIBED') {
-          console.log('Successfully subscribed to user_campaign_settings changes for store:', activeStoreId);
+          console.log('Successfully subscribed to user_campaign_settings changes for store:', activeStoreCreds.id);
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
           console.error('Supabase Realtime subscription error:', err || status);
           setError('Ошибка подписки на обновления в реальном времени.');
@@ -220,49 +211,56 @@ const CampaignsPage = () => {
       });
 
     return () => {
-      console.log('Unsubscribing from user_campaign_settings changes for store:', activeStoreId);
+      console.log('Unsubscribing from user_campaign_settings changes for store:', activeStoreCreds.id);
       supabase.removeChannel(subscription);
     };
-  }, [user, activeStoreId]);
+  }, [user, activeStoreCreds, supabase]);
 
-  const handleStoreChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
-    setActiveStoreId(event.target.value);
-  };
-
-  // Обработчик изменения настроек кампании
-  const handleSettingChange = (ozonCampaignId: number, field: keyof UserCampaignSettingData, value: any) => {
+  const handleSettingChange = (campaignId: number, field: keyof UserCampaignSettings, value: any) => {
     setCampaigns(prevCampaigns =>
       prevCampaigns.map(campaign =>
-        campaign.id === ozonCampaignId
+        campaign.id === campaignId // Сравниваем с campaign.id
           ? {
               ...campaign,
               userSettings: {
                 ...campaign.userSettings,
                 [field]: value,
-                isDirty: true,
-              },
+                isDirty: true, // Помечаем, что есть несохраненные изменения
+              } as UserCampaignSettings, // Указываем тип явно
             }
           : campaign
       )
     );
   };
 
-  // Обработчик сохранения настроек для одной кампании
-  const handleSaveSettings = async (ozonCampaignId: number) => {
-    const campaignToSave = campaigns.find(c => c.id === ozonCampaignId);
-    if (!campaignToSave || !campaignToSave.userSettings.isDirty) return;
+  const handleSaveSettings = async (campaignId: number) => {
+    const campaign = campaigns.find(c => c.id === campaignId);
+    if (!campaign || !campaign.userSettings || !user || !activeStoreCreds) {
+      console.error('CampaignsPage: Save prerequisites not met for campaignId:', campaignId, {campaign, user, activeStoreCreds});
+      setErrorStatus(prev => ({ ...prev, [campaignId]: 'Ошибка: Недостаточно данных для сохранения.' }));
+      return;
+    }
 
-    setCampaigns(prev => prev.map(c => c.id === ozonCampaignId ? { ...c, userSettings: {...c.userSettings, isSaving: true, saveError: null} } : c));
+    setSavingStatus(prev => ({ ...prev, [campaignId]: true }));
+    setErrorStatus(prev => ({ ...prev, [campaignId]: null }));
 
     try {
-      const response = await axios.post('/api/user-campaign-settings', campaignToSave.userSettings);
-      const savedSettings = response.data; 
-      if (!savedSettings) {
-        throw new Error('Ответ сервера не содержит данных о сохраненных настройках.');
+      const response = await fetch('/api/user-campaign-settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(campaign.userSettings),
+      });
+      console.log('CampaignsPage: API response status:', response.status);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Failed to parse error response' }));
+        console.error('CampaignsPage: API error response data:', errorData);
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
       }
+      const savedSettings = await response.json();
+      console.log('CampaignsPage: Settings saved successfully:', savedSettings);
       setCampaigns(prev =>
         prev.map(c =>
-          c.id === ozonCampaignId
+          c.id === campaignId
             ? {
                 ...c,
                 userSettings: {
@@ -276,20 +274,23 @@ const CampaignsPage = () => {
         )
       );
     } catch (err: any) {
-      console.error('Error saving campaign settings for ID:', ozonCampaignId, err);
+      console.error('CampaignsPage: Error saving campaign settings for ID:', campaignId, err);
       const errorMessage = err.response?.data?.error || err.response?.data?.message || err.message || 'Неизвестная ошибка';
-      setCampaigns(prev => prev.map(c => c.id === ozonCampaignId ? { ...c, userSettings: {...c.userSettings, isSaving: false, saveError: errorMessage } } : c));
+      setErrorStatus(prev => ({ ...prev, [campaignId]: errorMessage }));
+      setCampaigns(prev => prev.map(c => 
+        c.id === campaignId // Сравниваем с campaign.id
+        ? { ...c, userSettings: {...(c.userSettings as UserCampaignSettings), isSaving: false, saveError: errorMessage } } 
+        : c));
+    } finally {
+      setSavingStatus(prev => ({ ...prev, [campaignId]: false }));
     }
   };
 
-  // Отображение главного лоадера, пока пользователь не загружен
-  if (!user && loading) { 
-    return (
-      <div className="flex justify-center items-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-      </div>
-    );
+  if (!user) {
+    return <AuthGuard><p>Загрузка пользователя...</p></AuthGuard>;
   }
+
+  console.log('CampaignsPage: Rendering. Loading state:', loading, 'Error state:', error, 'Number of campaigns:', campaigns.length, 'Active store:', activeStoreCreds?.name);
 
   return (
     <AuthGuard>
@@ -303,13 +304,17 @@ const CampaignsPage = () => {
           </label>
           <select
             id="storeSelect"
-            value={activeStoreId || ''}
-            onChange={handleStoreChange}
-            className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
-            disabled={allStores.length === 0 || loading}
+            value={activeStoreCreds?.id || ''}
+            onChange={(e) => {
+              const selectedStore = stores.find(s => s.id === e.target.value);
+              console.log('CampaignsPage: Store selected:', selectedStore);
+              setActiveStoreCreds(selectedStore || null);
+            }}
+            className="p-2 border rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+            disabled={stores.length === 0}
           >
-            {allStores.length === 0 && <option value="">Нет доступных магазинов Performance API</option>}
-            {allStores.map((store) => (
+            {stores.length === 0 && <option value="">Нет доступных магазинов Performance API</option>}
+            {stores.map((store) => (
               <option key={store.id} value={store.id}>
                 {store.name} (Client ID: {store.ozon_client_id.substring(0, 6)}...)
               </option>
@@ -317,14 +322,15 @@ const CampaignsPage = () => {
           </select>
         </div>
 
-        {loading && <p>Загрузка данных...</p>}
-        {error && <p className="text-red-500">{error}</p>}
-
-        {!loading && !error && campaigns.length === 0 && activeStoreId && (
-          <p>Для выбранного магазина нет рекламных кампаний или не удалось их загрузить.</p>
+        {loading && <p>Загрузка кампаний...</p>}
+        {error && <p className="text-red-500">Ошибка загрузки кампаний: {error}</p>}
+        {!loading && !error && campaigns.length === 0 && activeStoreCreds && (
+          <p>Нет кампаний для отображения для магазина &quot;{activeStoreCreds.name}&quot; или они еще не загружены.</p>
         )}
-
-        {campaigns.length > 0 && (
+        {!loading && !error && campaigns.length === 0 && !activeStoreCreds && (
+          <p>Пожалуйста, выберите магазин для отображения кампаний.</p>
+        )}
+        {!loading && !error && campaigns.length > 0 && (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
@@ -352,7 +358,7 @@ const CampaignsPage = () => {
                         className="form-checkbox h-5 w-5 text-blue-600 transition duration-150 ease-in-out"
                         checked={campaign.userSettings.is_budget_control_enabled}
                         onChange={(e) => handleSettingChange(campaign.id, 'is_budget_control_enabled', e.target.checked)}
-                        disabled={campaign.userSettings.isSaving}
+                        disabled={savingStatus[campaign.id] /* Удалено || !campaign.userSettings.is_budget_control_enabled - это состояние не должно блокировать снятие галочки */}
                       />
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -362,12 +368,12 @@ const CampaignsPage = () => {
                         value={campaign.userSettings.custom_daily_budget_limit === null || campaign.userSettings.custom_daily_budget_limit === undefined ? '' : campaign.userSettings.custom_daily_budget_limit}
                         onChange={(e) => handleSettingChange(campaign.id, 'custom_daily_budget_limit', e.target.value === '' ? null : parseFloat(e.target.value))}
                         placeholder="Не задан"
-                        disabled={!campaign.userSettings.is_budget_control_enabled || campaign.userSettings.isSaving}
+                        disabled={!campaign.userSettings.is_budget_control_enabled || savingStatus[campaign.id]}
                       />
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {campaign.userSettings.app_controlled_status || 'Не управляется'}
-                      {campaign.userSettings.saveError && <div className="text-xs text-red-500">Ошибка: {campaign.userSettings.saveError}</div>}
+                      {errorStatus[campaign.id] && <div className="text-xs text-red-500">Ошибка: {errorStatus[campaign.id]}</div>}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {campaign.userSettings.cached_daily_spend?.toLocaleString() ?? '-'}
@@ -375,10 +381,10 @@ const CampaignsPage = () => {
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <button 
                         onClick={() => handleSaveSettings(campaign.id)}
-                        disabled={!campaign.userSettings.isDirty || campaign.userSettings.isSaving}
+                        disabled={!campaign.userSettings.isDirty || savingStatus[campaign.id]}
                         className="text-indigo-600 hover:text-indigo-900 disabled:text-gray-400 disabled:cursor-not-allowed"
                       >
-                        {campaign.userSettings.isSaving ? 'Сохранение...' : 'Сохранить'}
+                        {savingStatus[campaign.id] ? 'Сохранение...' : 'Сохранить'}
                       </button>
                     </td>
                   </tr>

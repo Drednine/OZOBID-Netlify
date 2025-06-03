@@ -1,0 +1,203 @@
+{
+  "summary_version": "2.0",
+  "project_title": "OZOBID-Netlify Ozon Bidder",
+  "project_overview": {
+    "description": "SaaS платформа для управления рекламными кампаниями и товарами на маркетплейсе Ozon.",
+    "tech_stack": ["Next.js", "TypeScript", "Tailwind CSS", "Supabase", "Netlify", "Netlify Functions"],
+    "key_features_implemented": [
+      "Добавление и валидация Ozon Seller & Performance API ключей",
+      "Отображение списка магазинов",
+      "Выгрузка и отображение списка товаров магазина с Ozon Seller API (название, артикул, цена, остатки, изображения)",
+      "Базовая пагинация и поиск по названию/артикулу для товаров",
+      "Управление рекламными кампаниями Ozon Performance API (отображение списка, ручная настройка дневного бюджета, включение/выключение контроля бюджета)",
+      "Фоновый мониторинг рекламных кампаний (через Netlify Scheduled Function) для автоматической приостановки при превышении дневного бюджета и управления по расписанию (базовая реализация)",
+      "Обновление интерфейса управления кампаниями в реальном времени (через Supabase Realtime)"
+    ],
+    "key_features_planned_further": [
+      "Более детальное управление расписанием РК на фронтенде",
+      "Управление ставками в РК",
+      "Расширенная аналитика"
+    ],
+    "repository": "Drednine/OZOBID-Netlify"
+  },
+  "problem_chronology_and_feature_development": [
+    {
+      "id": 1,
+      "description": "Реализация добавления магазина Ozon (Seller API и Performance API ключи) с валидацией.",
+      "status": "Решено",
+      "details": "Включало отладку эндпоинтов валидации для обоих API, перенос валидации на бэкенд (src/app/api/validate-ozon-keys/route.ts) для обхода CORS, и корректное сохранение учетных данных в таблицы Supabase (ozon_seller_credentials, ozon_performance_credentials)."
+    },
+    {
+      "id": 2,
+      "description": "Реализация отображения списка товаров магазина.",
+      "status": "Решено",
+      "details": "Создан API-маршрут src/app/api/ozon/products/route.ts для агрегации данных о товарах с различных эндпоинтов Ozon Seller API. Компонент src/components/ProductExportForm.tsx обновлен для вызова этого API и отображения товаров. Реализована пагинация и глобальный поиск по названию/артикулу. Исправлена ошибка с некорректным ID товара для ссылки (используется SKU). Количество товаров на странице увеличено до 200."
+    },
+    {
+      "id": 3,
+      "description": "Реализация управления рекламными кампаниями (РК).",
+      "status": "Решено (базовый функционал)",
+      "sub_modules": [
+        {
+          "id": 3.1,
+          "task": "Проектирование и создание таблицы `user_campaign_settings` в Supabase.",
+          "details": "Таблица хранит пользовательские настройки для РК: дневной лимит, флаги контроля, расписание, кэшированные данные.",
+          "status": "Решено"
+        },
+        {
+          "id": 3.2,
+          "task": "API для получения списка РК и их настроек (src/app/api/ozon/performance/campaigns/route.ts).",
+          "details": "Получает кампании с Ozon Performance API и объединяет их с настройками из `user_campaign_settings`.",
+          "status": "Решено"
+        },
+        {
+          "id": 3.3,
+          "task": "Страница для отображения и управления РК (src/app/dashboard/campaigns/page.tsx).",
+          "details": "Отображает список РК, позволяет включать/выключать контроль бюджета и задавать дневной лимит.",
+          "status": "Решено"
+        },
+        {
+          "id": 3.4,
+          "task": "API для сохранения настроек РК (src/app/api/user-campaign-settings/route.ts).",
+          "details": "Выполняет `upsert` настроек в таблицу `user_campaign_settings`. Требует UNIQUE constraint на (user_id, performance_credentials_id, ozon_campaign_id).",
+          "status": "Решено (уникальное ограничение добавлено пользователем)"
+        },
+        {
+          "id": 3.5,
+          "task": "Фоновый обработчик для мониторинга РК (netlify/functions/campaign-budget-monitor.ts).",
+          "details": "Netlify Scheduled Function, запускается каждые 15 минут. Проверяет дневной бюджет и расписание, приостанавливает/возобновляет РК на Ozon, обновляет кэш в БД. Ошибка с синтаксисом netlify.toml исправлена.",
+          "status": "Решено"
+        },
+        {
+          "id": 3.6,
+          "task": "Интеграция Supabase Realtime на странице управления РК.",
+          "details": "Фронтенд подписывается на изменения в `user_campaign_settings` и обновляет UI.",
+          "status": "Решено"
+        },
+        {
+          "id": 3.7,
+          "task": "Добавление навигации на страницу управления РК.",
+          "details": "В src/app/dashboard/page.tsx добавлена вкладка для перехода на страницу кампаний.",
+          "status": "Решено"
+        }
+      ]
+    }
+  ],
+  "api_details": {
+    "ozon_seller_api": {
+      "base_url": "https://api-seller.ozon.ru",
+      "validation_endpoint": "GET /v1/supplier/available_warehouses",
+      "product_data_endpoints_used": [
+        {
+          "method": "POST",
+          "path": "/v3/product/list",
+          "purpose": "Список товаров."
+        },
+        {
+          "method": "POST",
+          "path": "/v3/product/info/list",
+          "purpose": "Детальная информация."
+        },
+        {
+          "method": "POST",
+          "path": "/v2/product/pictures/info",
+          "purpose": "Изображения."
+        },
+        {
+          "method": "POST",
+          "path": "/v5/product/info/prices",
+          "purpose": "Цены."
+        },
+        {
+          "method": "POST",
+          "path": "/v4/product/info/stocks",
+          "purpose": "Остатки."
+        }
+      ]
+    },
+    "ozon_performance_api": {
+      "base_url": "https://api-performance.ozon.ru",
+      "token_endpoint": "POST /api/client/token",
+      "endpoints_used": [
+        {
+          "method": "GET",
+          "path": "/api/client/campaign",
+          "purpose": "Получение списка РК (использовалось для валидации и на странице управления РК)."
+        },
+        {
+          "method": "GET",
+          "path": "/api/client/campaign/{campaignId}",
+          "purpose": "Получение статуса конкретной РК (используется в фоновом обработчике)."
+        },
+        {
+          "method": "POST",
+          "path": "/api/client/campaign/{campaignId}/activate",
+          "purpose": "Активация РК (используется в фоновом обработчике)."
+        },
+        {
+          "method": "POST",
+          "path": "/api/client/campaign/{campaignId}/deactivate",
+          "purpose": "Деактивация РК (используется в фоновом обработчике)."
+        },
+        {
+          "method": "GET",
+          "path": "/api/client/statistics/campaign/product/json",
+          "purpose": "Получение статистики по РК, включая дневные расходы (используется в фоновом обработчике).",
+          "params_example": "{ campaigns: [campaignId], dateFrom: 'YYYY-MM-DD', dateTo: 'YYYY-MM-DD' }"
+        }
+      ]
+    }
+  },
+  "supabase_table_structures": {
+    "ozon_seller_credentials": { "columns": ["id", "user_id", "name", "client_id", "api_key", "...timestamps"] },
+    "ozon_performance_credentials": { "columns": ["id", "user_id", "name", "ozon_client_id", "ozon_client_secret", "...timestamps"] },
+    "user_campaign_settings": {
+      "columns": [
+        "id (uuid, pk)", 
+        "user_id (uuid, fk to users.id)", 
+        "ozon_campaign_id (int8)", 
+        "performance_credentials_id (uuid, fk to ozon_performance_credentials.id)",
+        "custom_daily_budget_limit (numeric, nullable)",
+        "is_budget_control_enabled (boolean, default: false)",
+        "app_controlled_status (text, nullable)",
+        "scheduling_enabled (boolean, default: false)",
+        "schedule_start_time (text, nullable)",
+        "schedule_end_time (text, nullable)",
+        "schedule_days (text[], nullable)",
+        "last_checked_at (timestamptz, nullable)",
+        "last_daily_limit_pause_date (date, nullable)",
+        "cached_daily_spend (numeric, nullable)",
+        "cached_ozon_status (text, nullable)",
+        "created_at (timestamptz)",
+        "updated_at (timestamptz)"
+      ],
+      "notes": "RLS и Realtime включены. Добавлено UNIQUE ограничение на (user_id, performance_credentials_id, ozon_campaign_id)."
+    }
+  },
+  "key_file_modifications_summary": {
+    "src_lib_types_ozon_ts": ["Добавлен интерфейс OzonPerformanceCredentials."],
+    "src_app_api_validate-ozon-keys_route_ts": "Серверная валидация ключей.",
+    "src_components_MultiStoreForm_tsx": "Вызов бэкенд-валидации, сохранение в две таблицы.",
+    "src_app_api_ozon_products_route_ts": "Агрегация данных о товарах.",
+    "src_components_ProductExportForm_tsx": "Вызов API товаров, пагинация.",
+    "src_app_dashboard_page_tsx": "Управление активными вкладками, отображение списка магазинов, навигация на страницу управления РК.",
+    "src_app_api_ozon_performance_campaigns_route_ts": "Получение РК Ozon и их настроек из БД.",
+    "src_app_dashboard_campaigns_page_tsx": "Отображение, редактирование настроек РК, интеграция Supabase Realtime.",
+    "src_app_api_user-campaign-settings_route_ts": "Сохранение (upsert) настроек РК.",
+    "netlify_functions_campaign-budget-monitor_ts": "Фоновый мониторинг бюджета и расписания РК.",
+    "netlify_toml": "Конфигурация для Netlify Scheduled Function."
+  },
+  "current_status_and_next_steps": {
+    "overall_progress": "Основные функции добавления магазинов, отображения товаров и управления рекламными кампаниями (включая автоматический контроль бюджета и базовое расписание) реализованы.",
+    "current_phase": "Тестирование и отладка развернутого приложения.",
+    "immediate_tasks": [
+      "Проверить сборку и развертывание на Netlify после исправления netlify.toml.",
+      "Проверить доступность страницы управления РК через новую вкладку.",
+      "Тестировать функционал страницы управления РК: загрузка данных, сохранение настроек.",
+      "Тестировать работу фоновой функции campaign-budget-monitor: запуск по расписанию (логи Netlify), корректность логики контроля бюджета и расписания, обновления в БД.",
+      "Тестировать обновления UI через Supabase Realtime.",
+      "Убедиться в корректной работе RLS и UNIQUE constraint для `user_campaign_settings`."
+    ],
+    "pending_action_from_user": "Провести всестороннее тестирование развернутого приложения согласно перечисленным задачам."
+  }
+} 
