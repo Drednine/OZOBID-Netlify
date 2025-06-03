@@ -1,11 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import axios from 'axios';
 
 // Инициализация Supabase клиента (используйте переменные окружения)
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+
+if (!supabaseUrl || !supabaseServiceRoleKey) {
+    console.error("[API CAMPAIGNS] Supabase URL and Service Role Key are required in environment variables.");
+    throw new Error("Supabase URL and Service Role Key are required."); 
+}
+
+const supabaseAdmin: SupabaseClient = createClient(supabaseUrl, supabaseServiceRoleKey);
 
 interface OzonCampaign {
   id: number;
@@ -134,7 +141,7 @@ export async function POST(request: NextRequest) {
 
     // 2. Получаем пользовательские настройки из Supabase
     console.log(`[API CAMPAIGNS] Fetching user campaign settings from Supabase for userId: ${userId}, performanceCredentialsId: ${performanceCredentialsId}`);
-    const { data: userSettings, error: supabaseError } = await supabase
+    const { data: userSettings, error: supabaseError } = await supabaseAdmin
       .from('user_campaign_settings')
       .select('*')
       .eq('user_id', userId)
