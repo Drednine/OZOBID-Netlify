@@ -21,6 +21,7 @@
     "utf-8-validate": "^6.0.3"
   },
   "devDependencies": {
+    "@netlify/functions": "^4.1.0",
     "@types/node": "^20.11.30",
     "@types/react": "^18.2.67",
     "@types/react-dom": "^18.2.22",

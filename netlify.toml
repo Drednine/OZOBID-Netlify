@@ -3,4 +3,10 @@
   publish = ".next"
 
 [[plugins]]
-  package = "@netlify/plugin-nextjs" 
+  package = "@netlify/plugin-nextjs"
+
+[functions]
+  directory = "netlify/functions/"
+
+[[functions.campaign-budget-monitor]]
+  schedule = "*/15 * * * *" 

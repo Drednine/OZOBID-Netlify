@@ -53,4 +53,14 @@ export interface OzonApiError {
 export interface OzonApiResponse<T> {
   result: T;
   error?: OzonApiError;
+}
+
+export interface OzonPerformanceCredentials {
+  id: string; // UUID, первичный ключ таблицы ozon_performance_credentials
+  user_id: string; // UUID, внешний ключ к auth.users
+  name: string; // Название магазина/подключения
+  ozon_client_id: string; // Client ID для Performance API
+  ozon_client_secret: string; // Client Secret для Performance API
+  created_at?: string;
+  updated_at?: string;
 } 
