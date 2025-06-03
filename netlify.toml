@@ -8,5 +8,5 @@
 [functions]
   directory = "netlify/functions/"
 
-[[functions.campaign-budget-monitor]]
+[functions.campaign-budget-monitor]
   schedule = "*/15 * * * *" 
