@@ -190,6 +190,18 @@ export default function DashboardPage() {
     router.push('/auth/login');
   };
 
+  // Диагностические логи перед основным рендером компонента
+  if (activeTab === 'campaigns') {
+    console.log('DashboardPage: Attempting to render CampaignsPage related content.');
+    console.log('DashboardPage: typeof CampaignsPage component:', typeof CampaignsPage);
+    console.log('DashboardPage: userId present?', !!userId);
+    console.log('DashboardPage: credentials state present?', !!credentials);
+    if (credentials) {
+      console.log('DashboardPage: credentials.performanceClientId present?', !!credentials.performanceClientId);
+      console.log('DashboardPage: full credentials content:', credentials);
+    }
+  }
+
   if (loading && !allStores.length) { // Показываем главный лоадер, если магазины еще не загружены
     console.log('DashboardPage: Loading user, rendering loading state.');
     return (
@@ -325,6 +337,36 @@ export default function DashboardPage() {
                    <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
                  </div>
                 )}
+              {activeTab === 'campaigns' && userId && credentials?.performanceClientId && (
+                <CampaignsPage />
+              )}
+              {activeTab === 'campaigns' && userId && (!credentials || !credentials.performanceClientId) && (
+                <div className="text-center py-12">
+                  <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                    <path vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  <h3 className="mt-2 text-lg font-medium text-gray-900">
+                    {credentials ? 'Performance API не подключен' : 'Магазин не выбран'}
+                  </h3>
+                  <p className="mt-2 text-sm text-gray-500">
+                    {credentials ? 
+                      'Для управления рекламными кампаниями необходимо, чтобы у выбранного магазина были настроены учетные данные Ozon Performance API. Вы можете добавить их при редактировании магазина или выбрать другой магазин.' :
+                      'Пожалуйста, выберите магазин на вкладке "Магазины", для которого вы хотите управлять рекламными кампаниями.'
+                    }
+                  </p>
+                  <button
+                    onClick={() => setActiveTab('stores')}
+                    className="mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  >
+                    Перейти к магазинам
+                  </button>
+                </div>
+              )}
+              {activeTab === 'campaigns' && !userId && (
+                 <div className="text-center py-12">
+                     <p>Пожалуйста, войдите в систему для доступа к этой секции.</p>
+                 </div>
+              )}
             </div>
           </div>
         </main>
