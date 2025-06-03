@@ -11,6 +11,7 @@
     "railway:build": "npm install --no-audit --no-fund --legacy-peer-deps && next build"
   },
   "dependencies": {
+    "@supabase/ssr": "^0.6.1",
     "@supabase/supabase-js": "^2.39.6",
     "axios": "^1.9.0",
     "bufferutil": "^4.0.8",
