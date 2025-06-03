@@ -156,12 +156,18 @@ export async function POST(request: NextRequest) {
     // 3. Объединяем данные
     const combinedCampaigns: CombinedCampaign[] = ozonCampaigns.map(ozonCampaign => {
       const setting = userSettings?.find(s => s.ozon_campaign_id === ozonCampaign.id);
+      console.log(`[API CAMPAIGNS] For Ozon Campaign ID: ${ozonCampaign.id} (${ozonCampaign.title}), Found UserSetting: ${setting ? JSON.stringify(setting) : 'NOT FOUND'}`);
       return {
         ...ozonCampaign,
         userSettings: setting || undefined,
       };
     });
     console.log(`[API CAMPAIGNS] Combined ${combinedCampaigns.length} campaigns with user settings.`);
+    // Логируем первые несколько объединенных кампаний для проверки
+    if (combinedCampaigns.length > 0) {
+      console.log("[API CAMPAIGNS] Sample of combined data (first 3):");
+      combinedCampaigns.slice(0, 3).forEach(c => console.log(JSON.stringify(c, null, 2)));
+    }
     console.log('[API CAMPAIGNS] Sending combined campaigns response.');
     return NextResponse.json(combinedCampaigns, { status: 200 });
 
