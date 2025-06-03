@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import AuthGuard from '@/components/AuthGuard';
 import MultiStoreForm from '@/components/MultiStoreForm';
 import ProductExportForm from '@/components/ProductExportForm';
-import CampaignsPage from './campaigns/page';
+import CampaignsPage from '../dashboard/campaigns/page';
+import { OzonCredentials, OzonPerformanceCredentials } from '@/lib/types/ozon';
 
 // Определим интерфейс для магазина, чтобы было понятнее
 interface Store {
@@ -20,8 +21,9 @@ interface Store {
 }
 
 export default function DashboardPage() {
+  console.log('DashboardPage: Component rendering started.');
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'stores' | 'export' | 'campaigns'>('stores'); // Переименовано active в activeTab и добавлена опция campaigns
+  const [activeTab, setActiveTab] = useState('stores'); // Значение по умолчанию
   const [userId, setUserId] = useState<string | null>(null);
   
   const [allStores, setAllStores] = useState<Store[]>([]);
@@ -127,6 +129,7 @@ export default function DashboardPage() {
 
   // Загрузка пользователя и магазинов при монтировании
   useEffect(() => {
+    console.log('DashboardPage: useEffect for user check triggered.');
     async function initialLoad() {
         const { data: { user: currentUser }, error: userError } = await supabase.auth.getUser();
         if (userError || !currentUser) {
@@ -187,12 +190,15 @@ export default function DashboardPage() {
   };
 
   if (loading && !allStores.length) { // Показываем главный лоадер, если магазины еще не загружены
+    console.log('DashboardPage: Loading user, rendering loading state.');
     return (
       <div className="flex justify-center items-center min-h-screen">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
       </div>
     );
   }
+
+  console.log(`DashboardPage: Rendering content for activeTab: ${activeTab}`);
 
   return (
     <AuthGuard>

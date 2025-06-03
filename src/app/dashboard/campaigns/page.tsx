@@ -52,6 +52,7 @@ import { User, RealtimePostgresChangesPayload, REALTIME_SUBSCRIBE_STATES } from 
 type CombinedCampaignType = LocalCombinedCampaign; // Используем псевдоним для импортированного типа
 
 const CampaignsPage = () => {
+  console.log('CampaignsPage: Component rendering started.');
   const router = useRouter(); // useRouter
   const supabase = createClient();
   const [user, setUser] = useState<User | null>(null);
@@ -64,33 +65,67 @@ const CampaignsPage = () => {
   const [errorStatus, setErrorStatus] = useState<{[key: number]: string | null}>({});
 
   const fetchUserDataAndStores = useCallback(async () => {
+    console.log('CampaignsPage: fetchUserDataAndStores called.');
     const { data: { user: currentUser }, error: authError } = await supabase.auth.getUser();
     if (authError || !currentUser) {
+      console.error('CampaignsPage: Auth error or no current user. Redirecting to login.', authError);
       router.push('/auth/login');
       return;
     }
+    console.log('CampaignsPage: User fetched:', currentUser.id);
     setUser(currentUser);
 
+    console.log('CampaignsPage: Fetching performance credentials for user:', currentUser.id);
     const { data, error: dbError } = await supabase
       .from('ozon_performance_credentials')
       .select('*')
       .eq('user_id', currentUser.id);
-    if (dbError) throw dbError;
+    if (dbError) {
+      console.error('CampaignsPage: Error fetching performance credentials:', dbError);
+      setError('Ошибка загрузки магазинов Performance API.');
+      setStores([]);
+      setLoading(false);
+      return;
+    }
+
+    console.log('CampaignsPage: Performance credentials fetched:', data);
+
     if (Array.isArray(data)) {
       setStores(data);
-      if (data.length > 0 && !activeStoreCreds) {
-        setActiveStoreCreds(data[0]);
+      if (data.length > 0) {
+        console.log('CampaignsPage: Stores set. Total stores:', data.length, 'First store if exists:', data[0]?.name);
+        if (!activeStoreCreds && data.length > 0) {
+          console.log('CampaignsPage: Setting active store to the first one by default:', data[0].name);
+          setActiveStoreCreds(data[0]);
+        } else if (activeStoreCreds) {
+          const currentActiveStillExists = data.find(s => s.id === activeStoreCreds.id);
+          if (!currentActiveStillExists && data.length > 0) {
+            console.log('CampaignsPage: Previously active store not found, setting to first available.');
+            setActiveStoreCreds(data[0]);
+          } else if (!currentActiveStillExists && data.length === 0) {
+            console.log('CampaignsPage: No stores available after update, clearing active store.');
+            setActiveStoreCreds(null);
+          }
+        }
+      } else {
+        console.log('CampaignsPage: No performance stores found for this user.');
+        setStores([]);
+        setActiveStoreCreds(null);
       }
     } else {
+      console.warn('CampaignsPage: Performance credentials data is not an array:', data);
       setStores([]);
+      setActiveStoreCreds(null);
     }
-  }, [router, supabase]);
+  }, [router, supabase, activeStoreCreds]);
 
   useEffect(() => {
+    console.log('CampaignsPage: useEffect for fetchUserDataAndStores triggered.');
     fetchUserDataAndStores();
   }, [fetchUserDataAndStores]);
 
   const fetchCampaigns = useCallback(async () => {
+    console.log('CampaignsPage: fetchCampaigns called. User:', user, 'ActiveStoreCreds:', activeStoreCreds);
     if (!user || !activeStoreCreds) {
       setCampaigns([]);
       setLoading(false);
@@ -152,6 +187,7 @@ const CampaignsPage = () => {
   }, [user, activeStoreCreds, supabase]);
 
   useEffect(() => {
+    console.log('CampaignsPage: useEffect for fetchCampaigns triggered. User:', user, 'ActiveStoreCreds:', activeStoreCreds);
     if (user && activeStoreCreds) {
       fetchCampaigns();
     } else {
@@ -286,11 +322,12 @@ const CampaignsPage = () => {
     }
   };
 
+  console.log('CampaignsPage: Rendering. Loading:', loading, 'Error:', error, 'Campaigns count:', campaigns.length, 'Active store:', activeStoreCreds?.name, 'User ID:', user?.id);
+
   if (!user) {
+    console.log('CampaignsPage: No user object, rendering AuthGuard with loading message.');
     return <AuthGuard><p>Загрузка пользователя...</p></AuthGuard>;
   }
-
-  console.log('CampaignsPage: Rendering. Loading state:', loading, 'Error state:', error, 'Number of campaigns:', campaigns.length, 'Active store:', activeStoreCreds?.name);
 
   return (
     <AuthGuard>
