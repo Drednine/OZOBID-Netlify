@@ -250,135 +250,181 @@ const CampaignsPage = () => {
       console.log('Unsubscribing from user_campaign_settings changes for store:', activeStoreCreds.id);
       supabase.removeChannel(subscription);
     };
-  }, [user, activeStoreCreds, supabase]);
+  }, [user, supabase, activeStoreCreds]);
 
-  const handleSettingChange = (campaignId: number, field: keyof UserCampaignSettings, value: any) => {
+  const handleSettingChange = (
+    campaignOzonId: number, // ID кампании от Ozon
+    field: keyof UserCampaignSettings,
+    value: any
+  ) => {
     setCampaigns(prevCampaigns =>
-      prevCampaigns.map(campaign =>
-        campaign.id === campaignId // Сравниваем с campaign.id
-          ? {
-              ...campaign,
-              userSettings: {
-                ...campaign.userSettings,
-                [field]: value,
-                isDirty: true, // Помечаем, что есть несохраненные изменения
-              } as UserCampaignSettings, // Указываем тип явно
-            }
-          : campaign
-      )
+      prevCampaigns.map(c => {
+        if (c.id === campaignOzonId) {
+          let processedValue = value;
+          if (field === 'custom_daily_budget_limit') {
+            const numValue = parseFloat(value);
+            processedValue = isNaN(numValue) || numValue < 0 ? null : numValue;
+          }
+          if (field === 'is_budget_control_enabled') {
+            processedValue = typeof value === 'boolean' ? value : false;
+          }
+          return {
+            ...c,
+            userSettings: {
+              ...(c.userSettings as UserCampaignSettings), // Добавляем явное приведение типа, если userSettings может быть неполным
+              ozon_campaign_id: c.id, // Убедимся, что ozon_campaign_id всегда есть
+              user_id: user!.id, // user не должен быть null на этом этапе
+              performance_credentials_id: activeStoreCreds!.id, // activeStoreCreds не должен быть null
+              [field]: processedValue,
+              isDirty: true,
+              saveError: null,
+            } as UserCampaignSettings,
+          };
+        }
+        return c;
+      })
     );
   };
 
-  const handleSaveSettings = async (campaignId: number) => {
-    const campaign = campaigns.find(c => c.id === campaignId);
-    if (!campaign || !campaign.userSettings || !user || !activeStoreCreds) {
-      console.error('CampaignsPage: Save prerequisites not met for campaignId:', campaignId, {campaign, user, activeStoreCreds});
-      setErrorStatus(prev => ({ ...prev, [campaignId]: 'Ошибка: Недостаточно данных для сохранения.' }));
+  const handleSaveSettings = async (campaignOzonId: number) => {
+    const campaignToSave = campaigns.find(c => c.id === campaignOzonId);
+
+    if (!campaignToSave || !campaignToSave.userSettings || !user || !activeStoreCreds) {
+      console.error('CampaignsPage: Save prerequisites not met for campaignOzonId:', campaignOzonId, { campaignToSave, user, activeStoreCreds });
+      // Обновляем состояние ошибки для конкретной кампании, если это еще не сделано
+      setCampaigns(prev => prev.map(c => c.id === campaignOzonId ? { ...c, userSettings: { ...(c.userSettings as UserCampaignSettings), saveError: 'Ошибка: Недостаточно данных для сохранения.' } } : c));
       return;
     }
 
-    setSavingStatus(prev => ({ ...prev, [campaignId]: true }));
-    setErrorStatus(prev => ({ ...prev, [campaignId]: null }));
+    // Установка состояния загрузки и сброс ошибки
+    setCampaigns(prev => prev.map(c =>
+      c.id === campaignOzonId
+        ? { ...c, userSettings: { ...c.userSettings, isSaving: true, saveError: null } }
+        : c
+    ));
+
+    const settingsToSave: UserCampaignSettings = {
+      ...campaignToSave.userSettings,
+      user_id: user.id, // Убедимся, что эти ID передаются
+      ozon_campaign_id: campaignToSave.id,
+      performance_credentials_id: activeStoreCreds.id,
+    };
+    
+    // Удаляем клиентские поля перед отправкой на сервер
+    delete settingsToSave.isDirty;
+    delete settingsToSave.isSaving;
+    delete settingsToSave.saveError;
 
     try {
+      console.log('CampaignsPage: Saving settings for campaignOzonId:', campaignOzonId, 'Payload:', settingsToSave);
       const response = await fetch('/api/user-campaign-settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(campaign.userSettings),
+        body: JSON.stringify(settingsToSave),
       });
-      console.log('CampaignsPage: API response status:', response.status);
+
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: 'Failed to parse error response' }));
-        console.error('CampaignsPage: API error response data:', errorData);
-        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+        const errorData = await response.json().catch(() => ({ message: 'Failed to parse error response from server' }));
+        throw new Error(errorData.error || errorData.message || `Server error: ${response.status}`);
       }
-      const savedSettings = await response.json();
-      console.log('CampaignsPage: Settings saved successfully:', savedSettings);
-      setCampaigns(prev =>
-        prev.map(c =>
-          c.id === campaignId
-            ? {
-                ...c,
-                userSettings: {
-                  ...savedSettings,
-                  isDirty: false,
-                  isSaving: false,
-                  saveError: null,
-                },
-              }
-            : c
-        )
-      );
+
+      const savedSettings = await response.json(); // API должен вернуть сохраненные/обновленные настройки
+      console.log('CampaignsPage: Settings saved successfully for campaignOzonId:', campaignOzonId, 'Response:', savedSettings);
+
+      setCampaigns(prev => prev.map(c =>
+        c.id === campaignOzonId
+          ? {
+              ...c,
+              userSettings: {
+                ...c.userSettings, // Сохраняем существующие, на случай если API не вернул все поля
+                ...savedSettings.data, // Обновляем данными с сервера (API возвращает { data: UserCampaignSettings })
+                isDirty: false,
+                isSaving: false,
+                saveError: null,
+              } as UserCampaignSettings,
+            }
+          : c
+      ));
+
     } catch (err: any) {
-      console.error('CampaignsPage: Error saving campaign settings for ID:', campaignId, err);
-      const errorMessage = err.response?.data?.error || err.response?.data?.message || err.message || 'Неизвестная ошибка';
-      setErrorStatus(prev => ({ ...prev, [campaignId]: errorMessage }));
-      setCampaigns(prev => prev.map(c => 
-        c.id === campaignId // Сравниваем с campaign.id
-        ? { ...c, userSettings: {...(c.userSettings as UserCampaignSettings), isSaving: false, saveError: errorMessage } } 
-        : c));
-    } finally {
-      setSavingStatus(prev => ({ ...prev, [campaignId]: false }));
-    }
+      console.error('CampaignsPage: Error saving campaign settings for campaignOzonId:', campaignOzonId, err);
+      setCampaigns(prev => prev.map(c =>
+        c.id === campaignOzonId
+          ? { ...c, userSettings: { ...(c.userSettings as UserCampaignSettings), isSaving: false, saveError: err.message } }
+          : c
+      ));
+    } 
   };
 
   console.log('CampaignsPage: Rendering. Loading:', loading, 'Error:', error, 'Campaigns count:', campaigns.length, 'Active store:', activeStoreCreds?.name, 'User ID:', user?.id);
 
   if (!user) {
     console.log('CampaignsPage: No user object, rendering AuthGuard with loading message.');
-    return <AuthGuard><p>Загрузка пользователя...</p></AuthGuard>;
+    return <div className="text-center p-8">Загрузка данных пользователя...</div>;
   }
 
   return (
     <AuthGuard>
       <div className="container mx-auto p-4">
-        <h1 className="text-2xl font-bold mb-4">Управление рекламными кампаниями Ozon</h1>
+        <h1 className="text-2xl font-bold mb-6">Управление рекламными кампаниями Ozon</h1>
 
         {/* Выбор магазина */}
-        <div className="mb-4">
-          <label htmlFor="storeSelect" className="block text-sm font-medium text-gray-700 mb-1">
+        <div className="mb-6">
+          <label htmlFor="store-select" className="block text-sm font-medium text-gray-700 mb-1">
             Выберите магазин (Performance API):
           </label>
           <select
-            id="storeSelect"
+            id="store-select"
             value={activeStoreCreds?.id || ''}
             onChange={(e) => {
               const selectedStore = stores.find(s => s.id === e.target.value);
-              console.log('CampaignsPage: Store selected:', selectedStore);
               setActiveStoreCreds(selectedStore || null);
             }}
-            className="p-2 border rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+            className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md shadow-sm"
             disabled={stores.length === 0}
           >
-            {stores.length === 0 && <option value="">Нет доступных магазинов Performance API</option>}
-            {stores.map((store) => (
+            {stores.length === 0 && <option value="">Нет доступных магазинов с Performance API</option>}
+            {stores.map(store => (
               <option key={store.id} value={store.id}>
-                {store.name} (Client ID: {store.ozon_client_id.substring(0, 6)}...)
+                {store.name} (Client ID: {store.ozon_client_id.substring(0,6)}...)
               </option>
             ))}
           </select>
         </div>
 
-        {loading && <p>Загрузка кампаний...</p>}
-        {error && <p className="text-red-500">Ошибка загрузки кампаний: {error}</p>}
-        {!loading && !error && campaigns.length === 0 && activeStoreCreds && (
-          <p>Нет кампаний для отображения для магазина &quot;{activeStoreCreds.name}&quot; или они еще не загружены.</p>
+        {/* Сообщение о загрузке кампаний для выбранного магазина */}
+        {loading && campaigns.length === 0 && activeStoreCreds && (
+          <div className="text-center p-8">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mx-auto mb-4"></div>
+            Загрузка кампаний для магазина "{activeStoreCreds.name}"...
+          </div>
         )}
-        {!loading && !error && campaigns.length === 0 && !activeStoreCreds && (
-          <p>Пожалуйста, выберите магазин для отображения кампаний.</p>
+
+        {/* Сообщение об ошибке при загрузке кампаний */}
+        {error && (
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-6" role="alert">
+            <strong className="font-bold">Ошибка!</strong>
+            <span className="block sm:inline"> {error}</span>
+          </div>
         )}
-        {!loading && !error && campaigns.length > 0 && (
-          <div className="overflow-x-auto">
+        
+        {/* Таблица кампаний */}
+        {!loading && activeStoreCreds && campaigns.length === 0 && !error && (
+           <div className="text-center p-8 bg-white rounded-lg shadow">
+             <p className="text-gray-500">Нет кампаний для отображения для магазина "{activeStoreCreds.name}" или они еще не загружены.</p>
+           </div>
+        )}
+
+        {activeStoreCreds && campaigns.length > 0 && (
+          <div className="shadow overflow-x-auto border-b border-gray-200 sm:rounded-lg">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Название (ID)</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Статус Ozon</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Контроль (Вкл/Выкл)</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Дневной лимит (₽)</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Статус (наш)</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Расход сегодня (кэш)</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Действия</th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Название (ID)</th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Статус Ozon</th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Контроль (Вкл/Выкл)</th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Дневной лимит (Р)</th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Действия</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
@@ -388,46 +434,56 @@ const CampaignsPage = () => {
                       <div className="text-sm font-medium text-gray-900">{campaign.title}</div>
                       <div className="text-xs text-gray-500">ID: {campaign.id}</div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{campaign.userSettings.cached_ozon_status || campaign.state}</td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${ campaign.userSettings?.cached_ozon_status === 'CAMPAIGN_STATE_RUNNING' ? 'bg-green-100 text-green-800' : campaign.userSettings?.cached_ozon_status === 'CAMPAIGN_STATE_STOPPED' || campaign.userSettings?.cached_ozon_status === 'CAMPAIGN_STATE_INACTIVE' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800' }`}>
+                        {campaign.userSettings?.cached_ozon_status || campaign.state}
+                      </span>
+                      {campaign.userSettings?.app_controlled_status && campaign.userSettings?.app_controlled_status !== 'USER_MANAGED' && (
+                          <div className="text-xs text-blue-600 mt-1">App: {campaign.userSettings.app_controlled_status}</div>
+                      )}
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <input 
                         type="checkbox" 
-                        className="form-checkbox h-5 w-5 text-blue-600 transition duration-150 ease-in-out"
-                        checked={campaign.userSettings.is_budget_control_enabled}
+                        className="h-5 w-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 disabled:opacity-50"
+                        checked={campaign.userSettings?.is_budget_control_enabled || false}
                         onChange={(e) => handleSettingChange(campaign.id, 'is_budget_control_enabled', e.target.checked)}
-                        disabled={savingStatus[campaign.id] /* Удалено || !campaign.userSettings.is_budget_control_enabled - это состояние не должно блокировать снятие галочки */}
+                        disabled={campaign.userSettings?.isSaving}
                       />
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <input 
                         type="number"
-                        className="form-input block w-full sm:text-sm sm:leading-5 rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50 disabled:bg-gray-100"
-                        value={campaign.userSettings.custom_daily_budget_limit === null || campaign.userSettings.custom_daily_budget_limit === undefined ? '' : campaign.userSettings.custom_daily_budget_limit}
-                        onChange={(e) => handleSettingChange(campaign.id, 'custom_daily_budget_limit', e.target.value === '' ? null : parseFloat(e.target.value))}
-                        placeholder="Не задан"
-                        disabled={!campaign.userSettings.is_budget_control_enabled || savingStatus[campaign.id]}
+                        min="0"
+                        className="w-32 px-2 py-1 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm disabled:opacity-50 disabled:bg-gray-100"
+                        value={campaign.userSettings?.custom_daily_budget_limit ?? ''} // Используем ?? '' для отображения пустого инпута если null
+                        onChange={(e) => handleSettingChange(campaign.id, 'custom_daily_budget_limit', e.target.value)}
+                        disabled={!campaign.userSettings?.is_budget_control_enabled || campaign.userSettings?.isSaving}
+                        placeholder={!campaign.userSettings?.is_budget_control_enabled ? "-" : "Не задан"}
                       />
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {campaign.userSettings.app_controlled_status || 'Не управляется'}
-                      {errorStatus[campaign.id] && <div className="text-xs text-red-500">Ошибка: {errorStatus[campaign.id]}</div>}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {campaign.userSettings.cached_daily_spend?.toLocaleString() ?? '-'}
-                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <button 
+                      <button
                         onClick={() => handleSaveSettings(campaign.id)}
-                        disabled={!campaign.userSettings.isDirty || savingStatus[campaign.id]}
-                        className="text-indigo-600 hover:text-indigo-900 disabled:text-gray-400 disabled:cursor-not-allowed"
+                        disabled={!campaign.userSettings?.isDirty || campaign.userSettings?.isSaving}
+                        className="text-blue-600 hover:text-blue-900 disabled:text-gray-400 disabled:cursor-not-allowed px-3 py-1 rounded-md border border-transparent hover:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
                       >
-                        {savingStatus[campaign.id] ? 'Сохранение...' : 'Сохранить'}
+                        {campaign.userSettings?.isSaving ? 'Сохранение...' : 'Сохранить'}
                       </button>
+                      {campaign.userSettings?.saveError && (
+                        <p className="text-xs text-red-600 mt-1">{campaign.userSettings.saveError}</p>
+                      )}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {!activeStoreCreds && !loading && (
+          <div className="text-center p-8 bg-white rounded-lg shadow">
+            <p className="text-gray-500">Пожалуйста, выберите магазин для отображения кампаний.</p>
           </div>
         )}
       </div>
