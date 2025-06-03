@@ -47,6 +47,7 @@ interface CombinedCampaign extends OzonCampaign {
 }
 
 async function getOzonPerformanceToken(clientId: string, clientSecret: string): Promise<string | null> {
+  console.log('[API CAMPAIGNS] Attempting to fetch Ozon Performance API token for ClientId:', clientId.substring(0, 10) + '...'); // Логируем часть ID
   try {
     const response = await axios.post(
       'https://api-performance.ozon.ru/api/client/token',
@@ -59,50 +60,79 @@ async function getOzonPerformanceToken(clientId: string, clientSecret: string): 
         headers: { 'Content-Type': 'application/json' },
       }
     );
-    return response.data.access_token;
-  } catch (error) {
-    console.error('Error fetching Ozon Performance API token:', error);
+    if (response.data && response.data.access_token) {
+      console.log('[API CAMPAIGNS] Successfully fetched Ozon Performance API token.');
+      return response.data.access_token;
+    } else {
+      console.error('[API CAMPAIGNS] Ozon Performance API token response missing access_token:', response.data);
+      return null;
+    }
+  } catch (error: any) {
+    console.error('[API CAMPAIGNS] Error fetching Ozon Performance API token:', error.response?.data || error.message);
     return null;
   }
 }
 
 export async function POST(request: NextRequest) {
+  console.log('[API CAMPAIGNS] Received POST request.');
   try {
-    const { clientId, clientSecret, userId, performanceCredentialsId } = await request.json();
+    const body = await request.json();
+    const { clientId, clientSecret, userId, performanceCredentialsId } = body;
+    console.log('[API CAMPAIGNS] Request body parsed:', { clientId: clientId?.substring(0,10)+'...', userId, performanceCredentialsId });
 
     if (!clientId || !clientSecret || !userId || !performanceCredentialsId) {
+      console.error('[API CAMPAIGNS] Missing required parameters.');
       return NextResponse.json({ error: 'Missing required parameters: clientId, clientSecret, userId, performanceCredentialsId' }, { status: 400 });
     }
 
     const accessToken = await getOzonPerformanceToken(clientId, clientSecret);
     if (!accessToken) {
+      console.error('[API CAMPAIGNS] Failed to authenticate with Ozon Performance API, token is null.');
       return NextResponse.json({ error: 'Failed to authenticate with Ozon Performance API' }, { status: 500 });
     }
+    // console.log('[API CAMPAIGNS] Ozon Access Token (first 10 chars):', accessToken.substring(0, 10)); // For verification
 
     // 1. Получаем кампании с Ozon
     let ozonCampaigns: OzonCampaign[] = [];
+    const ozonApiUrl = 'https://api-performance.ozon.ru/api/client/campaign';
+    console.log(`[API CAMPAIGNS] Fetching campaigns from Ozon API: ${ozonApiUrl}`);
     try {
-      const ozonResponse = await axios.get('https://api-performance.ozon.ru/api/client/campaign', {
+      const ozonResponse = await axios.get(ozonApiUrl, {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
           'Client-Id': clientId,
           'Content-Type': 'application/json',
         },
+        // Можно добавить параметры запроса, если Ozon API их поддерживает (например, для пагинации или фильтров)
+        // params: { campaign_ids: [], states: ['CAMPAIGN_STATE_RUNNING', 'CAMPAIGN_STATE_MODERATION_PROCESSING'] }
       });
-      // В документации указано, что ответ содержит campaigns в result
-      // Однако, в некоторых случаях (например, при пустом списке) может быть иначе
-      ozonCampaigns = ozonResponse.data?.result?.campaigns || ozonResponse.data?.campaigns || [];
-      if (!Array.isArray(ozonCampaigns)) {
-        console.warn("Ozon API returned campaigns in an unexpected format:", ozonResponse.data);
-        ozonCampaigns = [];
+      console.log('[API CAMPAIGNS] Ozon API response status:', ozonResponse.status);
+      console.log('[API CAMPAIGNS] Ozon API raw response data:', JSON.stringify(ozonResponse.data, null, 2));
+
+      // Улучшенная проверка структуры ответа
+      if (ozonResponse.data && ozonResponse.data.result && Array.isArray(ozonResponse.data.result.campaigns)) {
+        ozonCampaigns = ozonResponse.data.result.campaigns;
+      } else if (ozonResponse.data && Array.isArray(ozonResponse.data.campaigns)) { // Некоторые API могут возвращать массив напрямую
+        ozonCampaigns = ozonResponse.data.campaigns;
+      } else if (ozonResponse.data && ozonResponse.data.result && Array.isArray(ozonResponse.data.result)) { // Еще один возможный вариант
+         ozonCampaigns = ozonResponse.data.result;
       }
-    } catch (error) {
-      console.error('Error fetching campaigns from Ozon:', error);
-      // Не прерываем выполнение, если не удалось получить кампании, вернем пустой список или ошибку, 
-      // но сначала попробуем получить пользовательские настройки
+       else if (ozonResponse.data && Array.isArray(ozonResponse.data)) { // И если просто массив пришел
+         ozonCampaigns = ozonResponse.data;
+      }
+      else {
+        console.warn("[API CAMPAIGNS] Ozon API returned campaigns in an unexpected format or an empty list. Raw data:", ozonResponse.data);
+        ozonCampaigns = []; // Оставляем пустым, если формат неизвестен или нет campaigns
+      }
+      console.log(`[API CAMPAIGNS] Parsed ${ozonCampaigns.length} campaigns from Ozon.`);
+
+    } catch (error: any) {
+      console.error('[API CAMPAIGNS] Error fetching campaigns from Ozon:', error.response?.data || error.message);
+      // Не прерываем, чтобы попробовать отдать настройки для уже закэшированных кампаний, если они были бы
     }
 
     // 2. Получаем пользовательские настройки из Supabase
+    console.log(`[API CAMPAIGNS] Fetching user campaign settings from Supabase for userId: ${userId}, performanceCredentialsId: ${performanceCredentialsId}`);
     const { data: userSettings, error: supabaseError } = await supabase
       .from('user_campaign_settings')
       .select('*')
@@ -110,23 +140,25 @@ export async function POST(request: NextRequest) {
       .eq('performance_credentials_id', performanceCredentialsId);
 
     if (supabaseError) {
-      console.error('Error fetching user campaign settings from Supabase:', supabaseError);
+      console.error('[API CAMPAIGNS] Error fetching user campaign settings from Supabase:', supabaseError);
       return NextResponse.json({ error: 'Failed to fetch user settings', details: supabaseError.message }, { status: 500 });
     }
+    console.log(`[API CAMPAIGNS] Fetched ${userSettings?.length || 0} user campaign settings from Supabase.`);
 
     // 3. Объединяем данные
     const combinedCampaigns: CombinedCampaign[] = ozonCampaigns.map(ozonCampaign => {
       const setting = userSettings?.find(s => s.ozon_campaign_id === ozonCampaign.id);
       return {
         ...ozonCampaign,
-        userSettings: setting || undefined, // Используем undefined если настройка не найдена
+        userSettings: setting || undefined,
       };
     });
-
+    console.log(`[API CAMPAIGNS] Combined ${combinedCampaigns.length} campaigns with user settings.`);
+    console.log('[API CAMPAIGNS] Sending combined campaigns response.');
     return NextResponse.json(combinedCampaigns, { status: 200 });
 
-  } catch (error) {
-    console.error('Error in /api/ozon/performance/campaigns POST handler:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+  } catch (error: any) {
+    console.error('[API CAMPAIGNS] Error in POST handler:', error.message);
+    return NextResponse.json({ error: 'Internal Server Error', details: error.message }, { status: 500 });
   }
 } 
