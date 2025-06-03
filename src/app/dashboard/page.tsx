@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase';
 import AuthGuard from '@/components/AuthGuard';
 import MultiStoreForm from '@/components/MultiStoreForm';
 import ProductExportForm from '@/components/ProductExportForm';
+import CampaignsPage from './campaigns/page';
 
 // Определим интерфейс для магазина, чтобы было понятнее
 interface Store {
@@ -224,8 +225,7 @@ export default function DashboardPage() {
                   >
                     Выгрузка товаров
                   </button>
-                  {/* Можно добавить кнопку для Кампаний позже */}
-                  {/* <button
+                  <button
                     onClick={() => setActiveTab('campaigns')}
                     className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
                       activeTab === 'campaigns'
@@ -234,7 +234,7 @@ export default function DashboardPage() {
                     }`}
                   >
                     Рекламные кампании
-                  </button> */}
+                  </button>
                 </div>
               </div>
               <div className="flex items-center">
