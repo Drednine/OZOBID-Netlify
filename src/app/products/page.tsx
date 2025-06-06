@@ -3,9 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import ProductExportPage from '@/components/ProductExportPage';
 import { supabase } from '@/lib/supabase';
-import type { NextPage } from 'next';
-
-const ProductsPage: NextPage = () => {
+const ProductsPage = () => {
   const [userId, setUserId] = useState<string | null>(null);
   const [credentials, setCredentials] = useState<any>(null);
   const [loading, setLoading] = useState(true);

@@ -20,6 +20,13 @@ interface Store {
   // Можно добавить другие поля при необходимости, например, created_at
 }
 
+interface SellerCredential {
+  id: string;
+  name: string;
+  client_id: string;
+  api_key: string;
+}
+
 export default function DashboardPage() {
   console.log('DashboardPage: Component rendering started.');
   const router = useRouter();
@@ -78,7 +85,7 @@ export default function DashboardPage() {
       console.log('DashboardPage: Seller credentials data:', sellerCredentials);
 
       const storesWithDetails: Store[] = await Promise.all(
-        sellerCredentials.map(async (sellerCred) => {
+        sellerCredentials.map(async (sellerCred: SellerCredential) => {
           let performanceCredential = null;
           if (sellerCred.name) { 
             const { data: perfData, error: perfError } = await supabase

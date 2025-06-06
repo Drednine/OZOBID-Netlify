@@ -3,9 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import MassBidManagementForm from '@/components/MassBidManagementForm';
-import type { NextPage } from 'next';
-
-const MassBidsPage: NextPage = () => {
+const MassBidsPage = () => {
   const [user, setUser] = useState<any>(null);
   const [credentials, setCredentials] = useState<any>(null);
   const [loading, setLoading] = useState(true);

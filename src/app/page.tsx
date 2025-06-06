@@ -6,7 +6,6 @@ import { supabase } from '@/lib/supabase';
 import RegisterForm from '@/components/RegisterForm';
 import MultiStoreForm from '@/components/MultiStoreForm';
 import ProductExportForm from '@/components/ProductExportForm';
-import type { NextPage } from 'next';
 
 const userId = 'mock-user-id'; // Заменить на реальный ID при интеграции
 const credentials = {
